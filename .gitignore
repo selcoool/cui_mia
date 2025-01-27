@@ -1,0 +1,14 @@
+# Bỏ qua tất cả các file .log
+*.log
+
+# Bỏ qua thư mục node_modules
+node_modules/
+
+# Bỏ qua file tạm thời của hệ điều hành
+.DS_Store
+
+# Bỏ qua file cấu hình môi trường
+.env
+
+# Bỏ qua tất cả file trong thư mục build
+/build/
