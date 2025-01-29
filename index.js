@@ -1,33 +1,38 @@
 const WebSocket = require('ws');
-const fs = require('fs');
+const express = require('express');
+const cors = require('cors'); // Thêm dòng này để khai báo cors
 
-// Khởi tạo WebSocket server tại cổng 3001
-const wss = new WebSocket.Server({ port: 3001 }, () => {
-  console.log('WebSocket server is running at ws://localhost:3001');
+const app = express();
+const wss = new WebSocket.Server({ port: 3001 });
+
+app.use(cors({ origin: "*" }));
+
+// Endpoint để phục vụ HTML Client
+app.get('/', (req, res) => {
+  res.sendFile(__dirname + '/public/index.html');
 });
 
-// Khi có client (ESP32) kết nối
-wss.on('connection', ws => {
-  console.log('Client connected.');
+// Kết nối WebSocket
+wss.on('connection', (ws) => {
+  console.log('ESP32 connected');
 
-  // Lắng nghe và nhận hình ảnh từ ESP32
-  ws.on('message', (message) => {
-    console.log('Received image data');
+  ws.on('message', (data) => {
+    console.log('Received frame of size:', data.length);
 
-    // Lưu dữ liệu hình ảnh vào file
-    const timestamp = Date.now();
-    const filename = `image_${timestamp}.jpg`;  // Tên file ảnh
-
-    // Ghi dữ liệu hình ảnh vào file
-    fs.writeFile(filename, message, (err) => {
-      if (err) {
-        console.error('Error writing image:', err);
-      } else {
-        console.log(`Image saved as ${filename}`);
+    // Gửi dữ liệu tới tất cả các client WebSocket
+    wss.clients.forEach(client => {
+      if (client !== ws && client.readyState === WebSocket.OPEN) {
+        client.send(data);
       }
     });
   });
 
-  // Gửi thông điệp chào mừng đến ESP32
-  ws.send('Hello from WebSocket Server!');
+  ws.on('close', () => {
+    console.log('ESP32 disconnected');
+  });
+});
+
+// Chạy server
+app.listen(3002, () => {
+  console.log('Server running on http://localhost:3000');
 });

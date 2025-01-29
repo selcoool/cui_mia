@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ESP32 Live Video Stream</title>
+  <style>
+    body { text-align: center; font-family: Arial, sans-serif; }
+    canvas { border: 1px solid black; display: block; margin: 0 auto; }
+  </style>
+</head>
+<body>
+  <h1>Live Video Stream from ESP32</h1>
+  <canvas id="videoCanvas" width="640" height="480"></canvas>
+
+  <script>
+    const canvas = document.getElementById("videoCanvas");
+    const context = canvas.getContext("2d");
+
+    // Connect to WebSocket server
+    const ws = new WebSocket("ws://192.168.0.17:3001"); // Địa chỉ WebSocket của server
+
+    ws.onopen = () => {
+      console.log("WebSocket connection established");
+    };
+
+    ws.onmessage = function(event) {
+      if (event.data instanceof Blob) {
+        const imageBlob = event.data;
+        const img = new Image();
+
+        img.onload = () => {
+          context.clearRect(0, 0, canvas.width, canvas.height); // Xóa khung hình cũ
+          context.drawImage(img, 0, 0, canvas.width, canvas.height); // Vẽ ảnh mới
+        };
+
+        img.src = URL.createObjectURL(imageBlob); // Chuyển Blob thành URL ảnh
+      } else {
+        console.warn("Received non-binary data from WebSocket");
+      }
+    };
+
+    ws.onerror = (error) => {
+      console.error("WebSocket error:", error);
+    };
+
+    ws.onclose = () => {
+      console.log("WebSocket connection closed");
+    };
+  </script>
+</body>
+</html>
