@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ESP32 Live Video Stream with Object Detection</title>
+  <style>
+    body { text-align: center; font-family: Arial, sans-serif; }
+    canvas { border: 1px solid black; display: block; margin: 0 auto; }
+    #result { text-align: left; margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <h1>Live Video Stream from ESP32 with Object Detection</h1>
+  <canvas id="videoCanvas" width="640" height="480"></canvas>
+  <div id="result"></div> <!-- Khu vực hiển thị tên các đối tượng -->
+
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+
+  <script>
+    const canvas = document.getElementById("videoCanvas");
+    const context = canvas.getContext("2d");
+    const resultDiv = document.getElementById("result");
+
+    // Connect to WebSocket server
+    const ws = new WebSocket("ws://192.168.0.17:3001"); // Replace with the actual WebSocket server address
+
+    ws.onopen = () => {
+      console.log("WebSocket connection established");
+    };
+
+    ws.onclose = () => {
+      console.log("WebSocket connection closed");
+    };
+
+    ws.onerror = (error) => {
+      console.error("WebSocket error:", error);
+    };
+
+    // Load the COCO-SSD model
+    async function loadModel() {
+      const model = await cocoSsd.load();
+      console.log("COCO-SSD model loaded");
+      return model;
+    }
+
+    // Handle the received video frames and perform object detection
+    ws.onmessage = async function (event) {
+      if (event.data instanceof Blob) {
+        // Convert Blob data into an image
+        const imageBlob = event.data;
+
+        // Create an image element
+        const img = new Image();
+
+        img.onload = async () => {
+          // Clear the previous frame
+          context.clearRect(0, 0, canvas.width, canvas.height);
+
+          // Draw the image onto the canvas
+          context.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+          // Perform object detection
+          const model = await loadModel(); // Load model once
+          const predictions = await model.detect(img);
+
+          // Draw bounding boxes for detected objects
+          predictions.forEach(prediction => {
+            context.beginPath();
+            context.rect(prediction.bbox[0], prediction.bbox[1], prediction.bbox[2], prediction.bbox[3]);
+            context.lineWidth = 2;
+            context.strokeStyle = 'red';
+            context.fillStyle = 'red';
+            context.stroke();
+            context.fillText(
+              `${prediction.class} (${Math.round(prediction.score * 100)}%)`,
+              prediction.bbox[0],
+              prediction.bbox[1] > 10 ? prediction.bbox[1] - 5 : 10
+            );
+          });
+
+          // Display the names and confidence of detected objects below the canvas
+          resultDiv.innerHTML = "<h2>Objects Detected:</h2>";
+          predictions.forEach(prediction => {
+            resultDiv.innerHTML += `<p>${prediction.class} - ${Math.round(prediction.score * 100)}%</p>`;
+          });
+        };
+
+        // Set the source of the image to the Blob data
+        img.src = URL.createObjectURL(imageBlob);
+      } else {
+        console.warn("Received non-binary data from WebSocket");
+      }
+    };
+  </script>
+</body>
+</html>
+

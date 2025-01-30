@@ -3,49 +3,190 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ESP32 Live Video Stream</title>
+  <title>ESP32 Live Video Stream with Object Detection and Image Comparison</title>
   <style>
     body { text-align: center; font-family: Arial, sans-serif; }
     canvas { border: 1px solid black; display: block; margin: 0 auto; }
+    #result { text-align: left; margin-top: 20px; }
   </style>
 </head>
 <body>
-  <h1>Live Video Stream from ESP32</h1>
+  <h1>Live Video Stream from ESP32 with Object Detection</h1>
   <canvas id="videoCanvas" width="640" height="480"></canvas>
+  <div id="result"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
 
   <script>
     const canvas = document.getElementById("videoCanvas");
     const context = canvas.getContext("2d");
+    const resultDiv = document.getElementById("result");
 
-    // Connect to WebSocket server
-    const ws = new WebSocket("ws://192.168.0.17:3001"); // Địa chỉ WebSocket của server
+    // Hàm tính hash trung bình (Average Hash) cho ảnh
+    function calculateAverageHash(image) {
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      canvas.width = 8;
+      canvas.height = 8;
+
+      // Vẽ ảnh lên canvas và giảm độ phân giải xuống 8x8
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+      const imageData = context.getImageData(0, 0, 8, 8);
+      const pixels = imageData.data;
+
+      let sum = 0;
+      // Tính giá trị trung bình độ sáng của các pixel (RGB)
+      for (let i = 0; i < pixels.length; i += 4) {
+        const r = pixels[i];     // Red channel
+        const g = pixels[i + 1]; // Green channel
+        const b = pixels[i + 2]; // Blue channel
+        const brightness = (r + g + b) / 3; // Trung bình RGB (độ sáng)
+        sum += brightness;
+      }
+
+      const average = sum / (pixels.length / 4);
+
+      // Tạo hash nhị phân: 1 nếu pixel sáng hơn trung bình, 0 nếu không
+      let hash = '';
+      for (let i = 0; i < pixels.length; i += 4) {
+        const r = pixels[i];     // Red channel
+        const g = pixels[i + 1]; // Green channel
+        const b = pixels[i + 2]; // Blue channel
+        const brightness = (r + g + b) / 3; // Trung bình RGB
+
+        hash += brightness > average ? '1' : '0';
+      }
+
+      return hash;
+    }
+
+    // Hàm so sánh hai hash
+    function compareHashes(hash1, hash2) {
+      let diffCount = 0;
+      for (let i = 0; i < hash1.length; i++) {
+        if (hash1[i] !== hash2[i]) {
+          diffCount++;
+        }
+      }
+      return diffCount;
+    }
+
+    // Hàm tính sự tương đồng giữa hai ảnh
+    function compareImageWithReference(videoImage, referenceHashes) {
+      // Tính hash cho ảnh video (khi ảnh đã sẵn sàng)
+      const videoHash = calculateAverageHash(videoImage);
+
+      // So sánh hash video với các hash trong danh sách hình ảnh
+      for (let referenceHash of referenceHashes) {
+        const diff = compareHashes(referenceHash, videoHash);
+        const similarity = 1 - diff / referenceHash.length;  // Tính tỷ lệ tương đồng (0 đến 1)
+
+        if (similarity > 0.9) { // Nếu độ tương đồng > 90%
+          console.log("Match found!");
+          return true; // Phát hiện hình ảnh trùng khớp
+        }
+      }
+
+      return false;
+    }
+
+    // Hàm tải danh sách hình ảnh từ server
+    async function loadImageHashes() {
+      // Lấy danh sách hình ảnh từ server (API trả về danh sách tên file)
+      const response = await fetch("/api/images");
+      const imageFiles = await response.json();
+
+      const imageHashes = [];
+      for (let imageFile of imageFiles) {
+        const img = new Image();
+        img.src = `/images/${imageFile}`;  // Đường dẫn tới ảnh trong thư mục server
+
+        img.onload = () => {
+          // Tính hash cho ảnh mẫu
+          const hash = calculateAverageHash(img);
+          imageHashes.push(hash);
+        };
+      }
+
+      return imageHashes;
+    }
+
+    // WebSocket để nhận video stream từ ESP32
+    const ws = new WebSocket("ws://192.168.0.17:3001"); // Thay bằng địa chỉ WebSocket thực tế
 
     ws.onopen = () => {
       console.log("WebSocket connection established");
     };
 
-    ws.onmessage = function(event) {
-      if (event.data instanceof Blob) {
-        const imageBlob = event.data;
-        const img = new Image();
-
-        img.onload = () => {
-          context.clearRect(0, 0, canvas.width, canvas.height); // Xóa khung hình cũ
-          context.drawImage(img, 0, 0, canvas.width, canvas.height); // Vẽ ảnh mới
-        };
-
-        img.src = URL.createObjectURL(imageBlob); // Chuyển Blob thành URL ảnh
-      } else {
-        console.warn("Received non-binary data from WebSocket");
-      }
+    ws.onclose = () => {
+      console.log("WebSocket connection closed");
     };
 
     ws.onerror = (error) => {
       console.error("WebSocket error:", error);
     };
 
-    ws.onclose = () => {
-      console.log("WebSocket connection closed");
+    // Load the COCO-SSD model
+    async function loadModel() {
+      const model = await cocoSsd.load();
+      console.log("COCO-SSD model loaded");
+      return model;
+    }
+
+    // Handle the received video frames and perform object detection
+    ws.onmessage = async function (event) {
+      if (event.data instanceof Blob) {
+        const imageBlob = event.data;
+        const img = new Image();
+
+        img.onload = async () => {
+          // Clear the previous frame
+          context.clearRect(0, 0, canvas.width, canvas.height);
+          context.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+          // Perform object detection
+          const model = await loadModel(); // Load model once
+          const predictions = await model.detect(img);
+
+          // Draw bounding boxes for detected objects
+          predictions.forEach(prediction => {
+            context.beginPath();
+            context.rect(prediction.bbox[0], prediction.bbox[1], prediction.bbox[2], prediction.bbox[3]);
+            context.lineWidth = 2;
+            context.strokeStyle = 'red';
+            context.fillStyle = 'red';
+            context.stroke();
+            context.fillText(
+              `${prediction.class} (${Math.round(prediction.score * 100)}%)`,
+              prediction.bbox[0],
+              prediction.bbox[1] > 10 ? prediction.bbox[1] - 5 : 10
+            );
+          });
+
+          // Load the hashes for reference images (if not already loaded)
+          const referenceHashes = await loadImageHashes();
+
+          // Compare with reference images
+          const matchFound = compareImageWithReference(img, referenceHashes);
+          if (matchFound) {
+            resultDiv.innerHTML = "Match found!";
+          } else {
+            resultDiv.innerHTML = "No match found.";
+          }
+
+          // Display the names and confidence of detected objects below the canvas
+          resultDiv.innerHTML += "<h2>Objects Detected:</h2>";
+          predictions.forEach(prediction => {
+            resultDiv.innerHTML += `<p>${prediction.class} - ${Math.round(prediction.score * 100)}%</p>`;
+          });
+        };
+
+        img.src = URL.createObjectURL(imageBlob);
+      } else {
+        console.warn("Received non-binary data from WebSocket");
+      }
     };
   </script>
 </body>

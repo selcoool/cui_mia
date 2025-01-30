@@ -1,6 +1,7 @@
 const WebSocket = require('ws');
 const express = require('express');
 const cors = require('cors'); // Thêm dòng này
+const path = require('path');
 
 const app = express();
 const PORT_HTTP = 3000; // Port cho HTTP server
