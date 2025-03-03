@@ -4,6 +4,7 @@
 #define POT_PIN 34 // Chân đọc giá trị từ Potentiometer
 
 void setup() {
+    Serial.begin(115200);
   pinMode(IN1, OUTPUT);
   pinMode(IN2, OUTPUT);
   pinMode(ENA, OUTPUT);

@@ -15,23 +15,16 @@ void setup() {
 }
 
 void loop() {
-  int potValue = analogRead(POT_PIN);  // Đọc giá trị từ potentiometer (0-1023 trên Arduino UNO)
-  int motorSpeed = map(potValue, 0, 1023, 0, 255);  // Chuyển đổi thành giá trị PWM (0-255)
+  int potValue = analogRead(POT_PIN);
+  int motorSpeed = map(potValue, 0, 4095, 0, 255);
 
-  // Điều khiển động cơ 1 quay theo chiều kim đồng hồ
-  digitalWrite(IN1, HIGH);
-  digitalWrite(IN2, LOW);
+  if (Serial.available()) {
+    String command = Serial.readStringUntil('\n');
+    command.trim();
+    int commandInt = command.toInt();
+    Serial.println(commandInt);
+    moveCar(commandInt, motorSpeed);
+  }
 
-  // Điều khiển động cơ 2 quay theo chiều kim đồng hồ
-  digitalWrite(IN3, HIGH);
-  digitalWrite(IN4, LOW);
-
-  // Điều khiển tốc độ động cơ 1 thông qua PWM
-  analogWrite(ENA, motorSpeed);  // Điều chỉnh tốc độ động cơ 1 (PWM)
-
-  // Điều khiển tốc độ động cơ 2 thông qua PWM (nếu có cần điều chỉnh cho động cơ 2)
-  // analogWrite(ENB, motorSpeed);  // Nếu có một chân PWM riêng cho động cơ 2, sử dụng analogWrite cho nó
-
-  delay(100);  // Chờ một chút trước khi đọc lại giá trị
+  delay(100);
 }
-
