@@ -1,0 +1,136 @@
+Dưới đây là hướng dẫn chi tiết về cách điều khiển cân bằng cho drone sử dụng MPU6050 và PID control trong Arduino:
+
+1. Nguyên lý hoạt động của PID control trong drone
+Để duy trì sự ổn định trong không gian 3D, drone cần điều khiển 3 góc chính: pitch, roll và yaw.
+
+Trong trường hợp này, chúng ta tập trung vào hai góc pitch và roll, vì chúng là yếu tố chính để duy trì thăng bằng của drone.
+
+a. Pitch (Góc nâng/hạ mũi drone):
+Pitch là góc nghiêng của drone theo phương trước/sau.
+
+Nếu drone nghiêng về phía trước, pitch có giá trị âm; nếu nghiêng về phía sau, pitch có giá trị dương.
+
+b. Roll (Góc nghiêng trái/phải):
+Roll là góc nghiêng của drone theo phương trái/phải.
+
+Nếu drone nghiêng sang trái, roll có giá trị âm; nếu nghiêng sang phải, roll có giá trị dương.
+
+2. Sử dụng cảm biến MPU6050 để đo pitch và roll
+MPU6050 là một cảm biến IMU (Inertial Measurement Unit) có thể đo gia tốc và tốc độ quay, giúp xác định pitch và roll của drone.
+
+Accelerometer (Gia tốc kế): Đo gia tốc trong các trục x, y, z.
+
+Gyroscope (Con quay hồi chuyển): Đo tốc độ quay quanh các trục x, y, z.
+
+Pitch và roll có thể được tính toán từ dữ liệu gia tốc (accelerometer) theo công thức sau:
+
+Pitch:
+
+pitch
+=
+atan2
+(
+𝑎
+𝑦
+,
+𝑎
+𝑥
+2
++
+𝑎
+𝑧
+2
+)
+pitch=atan2(ay, 
+ax 
+2
+ +az 
+2
+ 
+​
+ )
+Roll:
+
+roll
+=
+atan2
+(
+−
+𝑎
+𝑥
+,
+𝑎
+𝑦
+2
++
+𝑎
+𝑧
+2
+)
+roll=atan2(−ax, 
+ay 
+2
+ +az 
+2
+ 
+​
+ )
+3. Thuật toán PID để điều khiển động cơ
+Để điều chỉnh các động cơ của drone, chúng ta sử dụng PID controller (PID là từ viết tắt của Proportional, Integral, Derivative). PID sẽ giúp điều chỉnh tốc độ động cơ dựa trên sai số giữa giá trị thực tế (pitch, roll) và giá trị mục tiêu (0 độ - tức là không nghiêng).
+
+a. Công thức PID:
+P (Proportional): Phản hồi tỷ lệ với sai số hiện tại.
+
+𝑃
+=
+𝐾
+𝑝
+×
+error
+P=Kp×error
+I (Integral): Tính toán sai số tích lũy trong quá khứ để điều chỉnh.
+
+𝐼
+=
+𝐾
+𝑖
+×
+∫
+error
+I=Ki×∫error
+D (Derivative): Đo tốc độ thay đổi của sai số, giúp giảm thiểu dao động.
+
+𝐷
+=
+𝐾
+𝑑
+×
+𝑑
+(
+error
+)
+𝑑
+𝑡
+D=Kd× 
+dt
+d(error)
+​
+ 
+Tổng hợp các thành phần của PID:
+
+PID output
+=
+𝑃
++
+𝐼
++
+𝐷
+PID output=P+I+D
+4. Điều khiển động cơ của drone
+Motor Control: Để điều khiển drone giữ cân bằng, chúng ta cần điều chỉnh tốc độ các động cơ. Mỗi động cơ sẽ được điều chỉnh sao cho drone không bị nghiêng về phía trước, sau, trái hay phải.
+
+Đối với một drone 4 cánh (quadcopters), mỗi động cơ sẽ điều khiển một góc riêng biệt:
+
+Động cơ 1 và động cơ 3 điều khiển pitch.
+
+Động cơ 2 và động cơ 4 điều khiển roll.
