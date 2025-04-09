@@ -2,7 +2,7 @@
 #include <LoRa.h>
 
 #define SS 5
-#define RST 14
+#define RST 4
 #define DIO0 26
 #define LED 2  
 

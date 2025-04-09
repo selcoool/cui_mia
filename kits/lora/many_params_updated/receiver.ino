@@ -5,13 +5,13 @@
 #define RST 14
 #define DIO0 26
 
-#define JOY1_X 35
-#define JOY1_Y 34
-#define JOY1_B 25
+#define JOY2_X 35
+#define JOY2_Y 34
+#define JOY2_B 25
 
-#define JOY2_X 33
-#define JOY2_Y 32
-#define JOY2_B 27
+#define JOY1_X 33
+#define JOY1_Y 32
+#define JOY1_B 27
 
 #define BTN3 4  // Nút nhấn toggle
 #define LED 2   // Đèn LED trên GPIO2
