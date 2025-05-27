@@ -7,7 +7,7 @@ RF24 radio(9, 10); // CE, CSN
 const byte address[6] = "00001";  // Địa chỉ 6 byte để nhận tín hiệu
 
 void setup() {
-  Serial.begin(9600);  // Khởi tạo giao tiếp Serial
+  Serial.begin(115200);  // Khởi tạo giao tiếp Serial
 
   // Kiểm tra trạng thái khởi tạo của nRF24L01
   if (!radio.begin()) {

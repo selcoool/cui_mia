@@ -3,88 +3,91 @@
 
 MPU6050 mpu;
 
-// Chân PWM cho động cơ (dùng chân PWM trên Arduino Nano: 3, 5, 6, 9, 10, 11)
-int motorPin1 = 3, motorPin2 = 5, motorPin3 = 6, motorPin4 = 9;
+float pitch, roll;
+float Kp = 2.0;  // Hệ số tỉ lệ
+float Kd = 0.5;  // Hệ số đạo hàm
+float previousErrorPitch = 0, previousErrorRoll = 0;
 
-float ax, ay, az, pitch, roll;
-int basePWM = 150;  // Tốc độ trung bình
-int minPWM = 110, maxPWM = 255;
+int motor1Pin = 3;
+int motor2Pin = 5;
+int motor3Pin = 6;
+int motor4Pin = 9;
 
 void setup() {
   Serial.begin(115200);
   Wire.begin();
   mpu.initialize();
 
-  if (!mpu.testConnection()) {
-    Serial.println("❌ MPU6050 không kết nối!");
-    while (1);  // Dừng nếu không kết nối được
+  if (mpu.testConnection()) {
+    Serial.println("MPU6050 connected successfully");
+  } else {
+    Serial.println("MPU6050 connection failed");
+    while (1);
   }
-  Serial.println("✅ MPU6050 đã kết nối!");
 
-  // Cấu hình chân PWM
-  pinMode(motorPin1, OUTPUT);
-  pinMode(motorPin2, OUTPUT);
-  pinMode(motorPin3, OUTPUT);
-  pinMode(motorPin4, OUTPUT);
-
-  calibrateMotors();
-  setMotorsPWM(basePWM, basePWM, basePWM, basePWM);
+  pinMode(motor1Pin, OUTPUT);
+  pinMode(motor2Pin, OUTPUT);
+  pinMode(motor3Pin, OUTPUT);
+  pinMode(motor4Pin, OUTPUT);
 }
 
 void loop() {
-  updateMPU();
+  int16_t ax, ay, az;
+  mpu.getAcceleration(&ax, &ay, &az);
 
-  // 🚀 Điều chỉnh tốc độ động cơ để giữ cân bằng
-  int correctionFactor = 2; // Điều chỉnh độ nhạy
-  int motor_truoc_trai = basePWM - (roll + pitch) * correctionFactor;
-  int motor_truoc_phai = basePWM + (roll - pitch) * correctionFactor;
-  int motor_sau_trai = basePWM - (roll - pitch) * correctionFactor;
-  int motor_sau_phai = basePWM + (roll + pitch) * correctionFactor;
-
-  // Giới hạn PWM trong khoảng từ 0 đến 255
-  motor_truoc_trai = constrain(motor_truoc_trai, minPWM, maxPWM);
-  motor_truoc_phai = constrain(motor_truoc_phai, minPWM, maxPWM);
-  motor_sau_trai = constrain(motor_sau_trai, minPWM, maxPWM);
-  motor_sau_phai = constrain(motor_sau_phai, minPWM, maxPWM);
-
-  // Cập nhật PWM động cơ
-  setMotorsPWM(motor_truoc_trai, motor_truoc_phai, motor_sau_trai, motor_sau_phai);
-
-  // 📊 Xuất dữ liệu lên Serial Monitor
-  Serial.print("Pitch: "); Serial.print(pitch);
-  Serial.print("\tRoll: "); Serial.print(roll);
-  Serial.print("\tmotor_truoc_trai: "); Serial.print(motor_truoc_trai);
-  Serial.print("\tmotor_truoc_phai: "); Serial.print(motor_truoc_phai);
-  Serial.print("\tmotor_sau_trai: "); Serial.print(motor_sau_trai);
-  Serial.print("\tmotor_sau_phai: "); Serial.println(motor_sau_phai);
-
-  delay(50);  // Dừng 50ms trước khi đọc lại
-}
-
-// 🔧 Hiệu chỉnh động cơ ban đầu
-void calibrateMotors() {
-  for (int pwm = minPWM; pwm <= maxPWM; pwm += 5) {
-    setMotorsPWM(pwm, pwm, pwm, pwm);
-    delay(20);
+  // Kiểm tra dữ liệu hợp lệ
+  if ((ax == 0 && ay == 0 && az == 0) || isnan(ax) || isnan(ay) || isnan(az)) {
+    Serial.println("Invalid sensor data!");
+    return;
   }
-}
 
-// ⚙️ Điều chỉnh tốc độ 4 động cơ
-void setMotorsPWM(int pwm1, int pwm2, int pwm3, int pwm4) {
-  analogWrite(motorPin1, pwm1);
-  analogWrite(motorPin2, pwm2);
-  analogWrite(motorPin3, pwm3);
-  analogWrite(motorPin4, pwm4);
-}
+  // Tính toán Pitch và Roll an toàn
+  float denominator_pitch = sqrt((float)ax * ax + (float)az * az);
+  float denominator_roll = sqrt((float)ay * ay + (float)az * az);
 
-// 📡 Cập nhật giá trị từ MPU6050
-void updateMPU() {
-  int16_t ax_raw, ay_raw, az_raw;
-  mpu.getAcceleration(&ax_raw, &ay_raw, &az_raw);
-  ax = ax_raw / 16384.0;
-  ay = ay_raw / 16384.0;
-  az = az_raw / 16384.0;
+  if (denominator_pitch != 0 && !isnan(denominator_pitch)) {
+    pitch = atan2((float)ay, denominator_pitch) * 180.0 / PI;
+  } else {
+    pitch = 0;
+  }
 
-  pitch = atan2(ay, sqrt(ax * ax + az * az)) * 180.0 / PI;
-  roll = atan2(-ax, sqrt(ay * ay + az * az)) * 180.0 / PI;
+  if (denominator_roll != 0 && !isnan(denominator_roll)) {
+    roll = atan2((float)-ax, denominator_roll) * 180.0 / PI;
+  } else {
+    roll = 0;
+  }
+
+  // PID đơn giản
+  float targetPitch = 0, targetRoll = 0;
+  float errorPitch = targetPitch - pitch;
+  float errorRoll = targetRoll - roll;
+
+  float pidOutputPitch = Kp * errorPitch + Kd * (errorPitch - previousErrorPitch);
+  float pidOutputRoll = Kp * errorRoll + Kd * (errorRoll - previousErrorRoll);
+
+  previousErrorPitch = errorPitch;
+  previousErrorRoll = errorRoll;
+
+  int baseSpeed = 128;
+
+  // Tính tốc độ động cơ
+  int motorSpeed1 = constrain(baseSpeed + pidOutputPitch + pidOutputRoll, 0, 255);
+  int motorSpeed2 = constrain(baseSpeed + pidOutputPitch - pidOutputRoll, 0, 255);
+  int motorSpeed3 = constrain(baseSpeed - pidOutputPitch + pidOutputRoll, 0, 255);
+  int motorSpeed4 = constrain(baseSpeed - pidOutputPitch - pidOutputRoll, 0, 255);
+
+  analogWrite(motor1Pin, motorSpeed1);
+  analogWrite(motor2Pin, motorSpeed2);
+  analogWrite(motor3Pin, motorSpeed3);
+  analogWrite(motor4Pin, motorSpeed4);
+
+  // Hiển thị dữ liệu
+  Serial.print("Pitch: "); Serial.print(pitch);
+  Serial.print(" | Roll: "); Serial.print(roll);
+  Serial.print(" || Motor1: "); Serial.print(motorSpeed1);
+  Serial.print(" | Motor2: "); Serial.print(motorSpeed2);
+  Serial.print(" | Motor3: "); Serial.print(motorSpeed3);
+  Serial.print(" | Motor4: "); Serial.println(motorSpeed4);
+
+  delay(100); // Delay nhỏ để giảm nhiễu
 }

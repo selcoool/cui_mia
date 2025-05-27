@@ -7,7 +7,7 @@ int motorPin1 = 3, motorPin2 = 5, motorPin3 = 6, motorPin4 = 9;
 
 float ax, ay, az, pitch, roll;
 int basePWM = 150;
-int minPWM = 110, maxPWM = 255;
+int minPWM = 0, maxPWM = 255;
 
 int errorCount = 0;
 const int maxErrorThreshold = 50;
