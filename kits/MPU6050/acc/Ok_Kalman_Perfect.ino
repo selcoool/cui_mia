@@ -88,7 +88,7 @@ void loop() {
   if (denominatorPitch > 0.0001 && denominatorRoll > 0.0001) {
     rawPitch = atan2(ay, denominatorPitch) * 180.0 / PI;
     rawRoll  = atan2(-ax, denominatorRoll) * 180.0 / PI;
-  } else {
+  } else { 
     rawPitch = 0;
     rawRoll = 0;
     Serial.println("Warning: Denominator near zero, skipping pitch/roll calculation");

@@ -1,0 +1,69 @@
+#include <WiFi.h>
+#include <WebSocketsServer.h>
+
+#define LED_PIN 8  // GPIO8: LED báo trạng thái client
+
+const char* ssid = "ESP32-AP";
+const char* password = "12345678";
+
+WebSocketsServer webSocket = WebSocketsServer(81);
+
+bool clientConnected = false;
+unsigned long lastDataTime = 0;
+const unsigned long timeoutNoData = 5000;  // 5 giây không nhận dữ liệu
+
+void webSocketEvent(uint8_t client_num, WStype_t type, uint8_t * payload, size_t length) {
+  switch (type) {
+    case WStype_CONNECTED:
+      Serial.printf("🔌 Client %u connected from %s\n", client_num, webSocket.remoteIP(client_num).toString().c_str());
+      clientConnected = true;
+      lastDataTime = millis();
+      digitalWrite(LED_PIN, HIGH); // Bật LED ngay khi có kết nối
+      break;
+
+    case WStype_TEXT:
+      Serial.printf("📩 Received from client %u: %s\n", client_num, payload);
+      lastDataTime = millis(); // Cập nhật thời gian nhận dữ liệu cuối
+      digitalWrite(LED_PIN, HIGH); // Giữ LED bật sáng khi nhận dữ liệu
+      break;
+
+    case WStype_DISCONNECTED:
+      Serial.printf("❌ Client %u disconnected\n", client_num);
+      clientConnected = false;
+      digitalWrite(LED_PIN, LOW); // Tắt LED khi mất kết nối
+      break;
+
+    default:
+      break;
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(LED_PIN, LOW);
+
+  WiFi.softAP(ssid, password);
+  delay(1000);
+
+  Serial.println("✅ WiFi AP started");
+  Serial.print("📡 IP address: ");
+  Serial.println(WiFi.softAPIP());
+
+  webSocket.begin();
+  webSocket.onEvent(webSocketEvent);
+  Serial.println("🖥️ WebSocket server started on port 81");
+}
+
+void loop() {
+  webSocket.loop();
+
+  if (clientConnected) {
+    if (millis() - lastDataTime > timeoutNoData) {
+      // Không nhận dữ liệu trong 5 giây => tắt LED, coi như mất tín hiệu
+      Serial.println("⚠️ Không nhận dữ liệu từ client trong 5 giây. Tắt LED.");
+      clientConnected = false;
+      digitalWrite(LED_PIN, LOW);
+    }
+  }
+}
