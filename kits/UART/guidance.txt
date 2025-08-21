@@ -1,0 +1,13 @@
+Kết nối phần cứng
+
+ESP32 UART2 (TX2, RX2) <-> RTL8720DN (RX, TX)
+
+ESP32 TX2 (GPIO17 mặc định) → RTL8720DN RX
+
+ESP32 RX2 (GPIO16 mặc định) ← RTL8720DN TX
+
+GND ↔ GND
+
+(Baud thường dùng 115200)
+
+⚠️ Lưu ý: Cả 2 board cần chung GND, và mức điện áp TTL đều là 3.3V.
