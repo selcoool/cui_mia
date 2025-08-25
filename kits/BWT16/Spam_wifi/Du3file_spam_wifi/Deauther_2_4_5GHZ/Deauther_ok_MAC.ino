@@ -1,5 +1,5 @@
 #include <vector>
-#include <stdio.h>  // Cần để dùng snprintf
+#include <stdio.h>
 #include "WiFi.h"
 #include "wifi_conf.h"
 #include "wifi_structures.h"
@@ -21,10 +21,10 @@ rtw_result_t scanResultHandler(rtw_scan_handler_result_t *scan_result) {
   if (scan_result->scan_complete) return RTW_SUCCESS;
 
   rtw_scan_result_t *record = &scan_result->ap_details;
-  record->SSID.val[record->SSID.len] = 0;  // Đảm bảo chuỗi null-terminated
+  record->SSID.val[record->SSID.len] = 0;  // null-terminated
 
   WiFiScanResult result;
-  result.ssid = String((const char*)record->SSID.val);
+  result.ssid = (record->SSID.len > 0) ? String((const char*)record->SSID.val) : "<ẨN>";
   result.channel = record->channel;
   result.rssi = record->signal_strength;
   memcpy(result.bssid, record->BSSID.octet, 6);
@@ -39,22 +39,22 @@ rtw_result_t scanResultHandler(rtw_scan_handler_result_t *scan_result) {
   return RTW_SUCCESS;
 }
 
-// Hàm quét và in danh sách mạng
+// Quét Wi-Fi
 void scanWiFi() {
   Serial.println("🔧 Khởi động WiFi stack...");
-  WiFi.begin((char*)"");  // Khởi tạo WiFi ở chế độ station
+  WiFi.begin((char*)""); // Chỉ khởi tạo Wi-Fi
 
   delay(500);
 
-  Serial.println("🔍 Bắt đầu quét Wi-Fi...");
+  Serial.println("🔍 Quét Wi-Fi...");
   scan_results.clear();
 
   if (wifi_scan_networks(scanResultHandler, NULL) == RTW_SUCCESS) {
-    delay(5000);  // Chờ quét xong
+    delay(5000);
 
-    Serial.print("✅ Đã tìm thấy ");
+    Serial.print("✅ Tìm thấy ");
     Serial.print(scan_results.size());
-    Serial.println(" mạng Wi-Fi:\n");
+    Serial.println(" mạng Wi-Fi.\n");
 
     for (size_t i = 0; i < scan_results.size(); i++) {
       String band = (scan_results[i].channel >= 36) ? "5 GHz" : "2.4 GHz";
@@ -66,16 +66,45 @@ void scanWiFi() {
       Serial.println("-------------------------------------");
     }
   } else {
-    Serial.println("❌ Không thể quét Wi-Fi!");
+    Serial.println("❌ Quét Wi-Fi thất bại!");
+  }
+}
+
+// Hàm tìm theo MAC
+void findWiFiByMAC(String mac) {
+  bool found = false;
+  for (auto &net : scan_results) {
+    if (net.bssid_str.equalsIgnoreCase(mac)) {
+      Serial.println("✅ Thông tin mạng Wi-Fi tìm thấy:");
+      Serial.println("📶 SSID   : " + net.ssid);
+      Serial.println("🔗 BSSID  : " + net.bssid_str);
+      Serial.println("📡 Kênh   : " + String(net.channel));
+      Serial.println("📉 RSSI   : " + String(net.rssi) + " dBm");
+      Serial.println("-------------------------------------");
+      found = true;
+      break;
+    }
+  }
+  if (!found) {
+    Serial.println("❌ Không tìm thấy Wi-Fi với MAC: " + mac);
   }
 }
 
 void setup() {
   Serial.begin(115200);
   delay(1000);
+  scanWiFi();
+
+  Serial.println("\nNhập địa chỉ MAC (ví dụ: 5C:92:5E:38:00:68) để tra cứu thông tin Wi-Fi:");
 }
 
 void loop() {
-  scanWiFi();       // Quét Wi-Fi mỗi lần lặp
-  delay(10000);     // Đợi 10 giây
+  if (Serial.available()) {
+    String input = Serial.readStringUntil('\n');
+    input.trim();  // loại bỏ khoảng trắng
+    if (input.length() > 0) {
+      findWiFiByMAC(input);
+      Serial.println("\nNhập tiếp địa chỉ MAC khác nếu muốn:");
+    }
+  }
 }
