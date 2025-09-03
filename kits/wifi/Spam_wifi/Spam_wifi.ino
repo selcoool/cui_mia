@@ -9,7 +9,7 @@ void setup() {
   Serial.begin(115200);
 
   // Đặt một địa chỉ MAC giả cho WiFi AP
-  uint8_t macAddress[6] = {0x5C, 0x92, 0x5E, 0x38, 0x00, 0x68}; // Địa chỉ MAC tùy chọn
+  uint8_t macAddress[6] = {0x5C, 0x92, 0x5E, 0x38, 0x00, 0x67}; // Địa chỉ MAC tùy chọn
   
   // Khởi động WiFi AP trước khi thay đổi địa chỉ MAC
   WiFi.mode(WIFI_AP);

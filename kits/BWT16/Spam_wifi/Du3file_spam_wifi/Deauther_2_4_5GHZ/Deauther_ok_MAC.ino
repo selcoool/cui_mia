@@ -15,6 +15,8 @@ typedef struct {
 } WiFiScanResult;
 
 std::vector<WiFiScanResult> scan_results;
+uint8_t deauth_bssid[6];
+uint16_t deauth_reason;
 
 // Hàm callback xử lý kết quả từng mạng Wi-Fi
 rtw_result_t scanResultHandler(rtw_scan_handler_result_t *scan_result) {
