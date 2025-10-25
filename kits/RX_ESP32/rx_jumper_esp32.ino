@@ -1,0 +1,41 @@
+#include <Arduino.h>
+#include <HardwareSerial.h>
+#include "sbus.h"  // thư viện SBUS từ lib/sbus
+
+#define RX1_PIN 16  // GPIO16 nhận tín hiệu SBUS
+
+// Tạo cổng UART1 cho SBUS
+HardwareSerial SerialSBUS(1);
+
+// Khởi tạo SBUS reader
+bfs::SbusRx sbus(&SerialSBUS, RX1_PIN, -1, true);  // RX, TX = -1 (không dùng), inverted = true
+
+void setup() {
+  Serial.begin(115200);
+  delay(1000);
+  Serial.println("🔌 ESP32 SBUS Receiver Started");
+
+  // Bắt đầu UART1 với SBUS settings: 100000 baud, 8E2
+  SerialSBUS.begin(100000, SERIAL_8E2, RX1_PIN, -1);
+
+  // Bắt đầu nhận SBUS
+  sbus.Begin();
+}
+
+void loop() {
+  if (sbus.Read()) {
+    const bfs::SbusData &data = sbus.data();
+
+    // In 8 kênh đầu
+    for (int i = 0; i < 8; i++) {
+      Serial.print("CH");
+      Serial.print(i);
+      Serial.print(": ");
+      Serial.print(data.ch[i]);
+      Serial.print("  ");
+    }
+
+    Serial.println();
+    delay(10);
+  }
+}

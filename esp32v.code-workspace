@@ -1,0 +1,12 @@
+{
+	"folders": [
+		{
+			"path": "D:/IOT/esp32v"
+		},
+		{
+			"name": "esp32V",
+			"path": "../../Documents/PlatformIO/Projects/esp32V"
+		}
+	],
+	"settings": {}
+}
