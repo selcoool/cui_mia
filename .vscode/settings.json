@@ -15,6 +15,7 @@
         "xtree": "cpp",
         "xutility": "cpp",
         "xlocinfo": "cpp",
-        "cstddef": "cpp"
+        "cstddef": "cpp",
+        "map": "cpp"
     }
 }
