@@ -34,6 +34,8 @@ float pitch=0, roll=0, yaw=0;
 float alpha = 0.98;
 unsigned long lastTime;
 
+bool isArmed = false;
+
 #define RX1_PIN 16
 HardwareSerial SerialSBUS(1);
 bfs::SbusRx sbus(&SerialSBUS, RX1_PIN, -1, true);
@@ -72,6 +74,22 @@ void loop() {
     desiredPitch    = map(data.ch[1], 172, 1811, -10, 10);
     desiredRoll     = map(data.ch[0], 172, 1811, -10, 10);
     desiredYaw      = map(data.ch[3], 172, 1811, -30, 30);
+
+    // --- ARM/DISARM via channel 4 switch ---
+    if(data.ch[4] > 1000){ // switch on → ARM
+      if(!isArmed){
+        isArmed = true;
+        pitchIntegral = rollIntegral = yawIntegral = 0;
+        pitchPrevError = rollPrevError = yawPrevError = 0;
+        pitchDerivativePrev = rollDerivativePrev = yawDerivativePrev = 0;
+        Serial.println(">> ARMED");
+      }
+    } else { // switch off → DISARM
+      if(isArmed){
+        isArmed = false;
+        Serial.println(">> DISARMED");
+      }
+    }
   } else {
     desiredThrottle = 1000;
     desiredPitch = 0;
@@ -143,17 +161,22 @@ void loop() {
   motorPWM[2] = throttleLimited - pitchPID - rollPID - yawPID;
   motorPWM[3] = throttleLimited - pitchPID + rollPID + yawPID;
 
-  // --- Anti-windup & write ---
+  // --- Nếu DISARM → giữ minPWM
   for (int i=0; i<4; i++){
-    if (motorPWM[i] > maxPWM) {
-      pitchIntegral -= pitchError*dt;
-      rollIntegral  -= rollError*dt;
-      yawIntegral   -= yawError*dt;
-    }
-    if (motorPWM[i] < minPWM) {
-      pitchIntegral -= pitchError*dt;
-      rollIntegral  -= rollError*dt;
-      yawIntegral   -= yawError*dt;
+    if(!isArmed){
+      motorPWM[i] = minPWM;
+    } else {
+      // Anti-windup
+      if (motorPWM[i] > maxPWM) {
+        pitchIntegral -= pitchError*dt;
+        rollIntegral  -= rollError*dt;
+        yawIntegral   -= yawError*dt;
+      }
+      if (motorPWM[i] < minPWM) {
+        pitchIntegral -= pitchError*dt;
+        rollIntegral  -= rollError*dt;
+        yawIntegral   -= yawError*dt;
+      }
     }
     motorPWM[i] = constrain(motorPWM[i], minPWM, maxPWM);
     int duty = map(motorPWM[i], 1000, 2000, 0, 4095);
@@ -161,6 +184,7 @@ void loop() {
   }
 
   // --- Debug ---
+  Serial.print(isArmed ? "[ARMED] " : "[DISARMED] ");
   Serial.print("Throttle: "); Serial.print(desiredThrottle,2);
   Serial.print(" | PitchPID: "); Serial.print(pitchPID,1);
   Serial.print(" | RollPID: "); Serial.print(rollPID,1);
@@ -174,3 +198,4 @@ void loop() {
 
   delay(10);
 }
+
