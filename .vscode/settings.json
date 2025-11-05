@@ -16,6 +16,7 @@
         "xutility": "cpp",
         "xlocinfo": "cpp",
         "cstddef": "cpp",
-        "map": "cpp"
+        "map": "cpp",
+        "ino": "c"
     }
 }
