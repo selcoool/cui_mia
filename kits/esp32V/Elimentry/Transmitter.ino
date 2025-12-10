@@ -1,7 +1,7 @@
 #include <esp_now.h>
 #include <WiFi.h>
 
-uint8_t droneMac[] = {0x1C, 0x69, 0x20, 0x96, 0x3A, 0xF4}; // MAC Drone
+uint8_t droneMac[] =  {0x90,0xE5,0xB1,0x99,0xA2,0xBE}; // MAC Drone
 
 const int LED_PIN = 2;
 const int LED_BLINK_DURATION = 50;
