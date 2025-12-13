@@ -18,10 +18,10 @@ typedef struct __attribute__((packed)) {
 ControlPacket packet;
 
 // Joystick pins
-const int JOY_X = 34;
-const int JOY_Y = 35;
-const int JOY_Z = 32;
-const int JOY_T = 33;
+const int JOY_X = 35;
+const int JOY_Y = 34;
+const int JOY_Z = 33;
+const int JOY_T = 32;
 
 const int BTN1 = 25;
 const int BTN2 = 26;
