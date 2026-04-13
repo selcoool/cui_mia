@@ -14,12 +14,14 @@ PPMData receivedData;
 void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
   memcpy(&receivedData, incomingData, sizeof(receivedData));
 
-  Serial.print("RX: ");
   for (int i = 0; i < CHANNELS; i++) {
-    Serial.print(receivedData.ch[i]);
-    Serial.print(" ");
-  }
-  Serial.println();
+  Serial.print("CH");
+  Serial.print(i + 1);
+  Serial.print(":");
+  Serial.print(receivedData.ch[i]);
+  Serial.print(" ");
+}
+Serial.println();
 }
 
 void setup() {
@@ -43,4 +45,3 @@ void setup() {
 
 void loop() {
 }
-
