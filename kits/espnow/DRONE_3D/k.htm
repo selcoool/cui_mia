@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FC PRO FIXED</title>
+
+<style>
+body{
+  margin:0;
+  background:#0b0f1a;
+  color:#fff;
+  font-family:Arial;
+}
+
+h2{
+  text-align:center;
+  color:#00ffcc;
+}
+
+.grid{
+  display:grid;
+  grid-template-columns:repeat(2,1fr);
+  gap:10px;
+  padding:10px;
+}
+
+.card{
+  background:#1c1f2a;
+  padding:10px;
+  border-radius:10px;
+}
+
+.row{
+  display:flex;
+  gap:20px;
+  flex-wrap:wrap;
+  justify-content:space-evenly;
+}
+
+.bar{
+  height:10px;
+  background:#333;
+  border-radius:5px;
+  overflow:hidden;
+  margin:4px 0;
+}
+
+.fill{
+  height:100%;
+  background:#00ffcc;
+  transition:width .15s;
+}
+
+.motor .fill{
+  background:#ff3b3b;
+}
+
+#warn{
+  text-align:center;
+  font-weight:bold;
+  font-size:20px;
+  margin:10px;
+  color:orange;
+}
+
+canvas{
+  width:100%;
+  height:400px;
+  background:radial-gradient(circle at center,#0f172a,#050816);
+}
+</style>
+</head>
+
+<body>
+
+<h2>🚁 FC DRONE CONNECTED</h2>
+<div id="warn"></div>
+
+<div class="grid">
+
+<!-- ATTITUDE -->
+<div class="card row">
+  <div>
+    <h3>ATTITUDE</h3>
+    Roll: <span id="r">0</span><br>
+    Pitch: <span id="p">0</span><br>
+    Yaw: <span id="y">0</span><br>
+    ALT: <span id="alt">0</span> m
+  </div>
+
+  <div>
+    <h3>DEVICE</h3>
+    MAC: <span id="mac"></span><br>
+    REMOTE: <span id="rmac"></span><br>
+  </div>
+
+  <div>
+    <h3>I2C</h3>
+    SDA <input id="sda"><br>
+    SCL <input id="scl"><br>
+    ADDR <input id="addr"><br>
+    <button onclick="saveI2C()">SAVE</button>
+    <button onclick="reset_memory()">RESET</button>
+  </div>
+</div>
+
+<!-- TX -->
+<div class="card">
+<h3>TX CHANNEL</h3>
+CH0 <div class="bar"><div id="ch0" class="fill"></div></div>
+CH1 <div class="bar"><div id="ch1" class="fill"></div></div>
+CH2 <div class="bar"><div id="ch2" class="fill"></div></div>
+CH3 <div class="bar"><div id="ch3" class="fill"></div></div>
+</div>
+
+<!-- PID + CANVAS -->
+<div class="card row">
+
+<div>
+<h3>PID CONTROL</h3>
+
+ROLL<br>
+KP <input id="r_kp" type="number" step="0.001"><br>
+KI <input id="r_ki" type="number" step="0.001"><br>
+KD <input id="r_kd" type="number"><br><br>
+
+PITCH<br>
+KP <input id="p_kp" type="number" step="0.001"><br>
+KI <input id="p_ki" type="number" step="0.001"><br>
+KD <input id="p_kd" type="number"><br><br>
+
+YAW<br>
+KP <input id="y_kp" type="number" step="0.001"><br>
+KI <input id="y_ki" type="number" step="0.001"><br>
+KD <input id="y_kd" type="number"><br><br>
+
+<button onclick="sendPID()">SAVE PID</button>
+</div>
+
+<div>
+<canvas id="c"></canvas>
+</div>
+
+</div>
+
+<!-- MOTORS -->
+<div class="card">
+<h3>MOTORS</h3>
+M1 <div class="bar motor"><div id="m1" class="fill"></div></div>
+M2 <div class="bar motor"><div id="m2" class="fill"></div></div>
+M3 <div class="bar motor"><div id="m3" class="fill"></div></div>
+M4 <div class="bar motor"><div id="m4" class="fill"></div></div>
+</div>
+
+</div>
+
+<script>
+
+// ===== ELEMENTS =====
+const r=document.getElementById("r");
+const p=document.getElementById("p");
+const y=document.getElementById("y");
+const alt=document.getElementById("alt");
+const mac=document.getElementById("mac");
+const rmac=document.getElementById("rmac");
+const warn=document.getElementById("warn");
+
+const sda=document.getElementById("sda");
+const scl=document.getElementById("scl");
+const addr=document.getElementById("addr");
+
+let ws=new WebSocket("ws://"+location.hostname+":81/");
+
+// ===== BAR =====
+function bar(id,val){
+  val=Math.max(0,Math.min(100,val));
+  document.getElementById(id).style.width=val+"%";
+}
+
+// ===== WS =====
+ws.onmessage=(e)=>{
+try{
+let d=JSON.parse(e.data);
+
+r.innerText=(d.r||0).toFixed(2);
+p.innerText=(d.p||0).toFixed(2);
+y.innerText=(d.y||0).toFixed(2);
+alt.innerText=(d.alt||0).toFixed(2);
+
+mac.innerText=d.mac||"-";
+rmac.innerText=d.rmac||"-";
+
+// STATUS
+if(d.fail){
+  warn.innerText="⚠ FAILSAFE";
+  warn.style.color="red";
+}
+else if(d.arm){
+  warn.innerText="ARMED";
+  warn.style.color="lime";
+}
+else{
+  warn.innerText="DISARMED";
+  warn.style.color="orange";
+}
+
+// TX
+bar("ch0",(d.ch0-1000)/10);
+bar("ch1",(d.ch1-1000)/10);
+bar("ch2",(d.ch2-1000)/10);
+bar("ch3",(d.ch3-1000)/10);
+
+// MOTORS
+bar("m1",d.m1*100/255);
+bar("m2",d.m2*100/255);
+bar("m3",d.m3*100/255);
+bar("m4",d.m4*100/255);
+
+}catch(err){}
+};
+
+// ===== SEND =====
+function sendPID(){
+ws.send("PID|"+
+r_kp.value+","+r_ki.value+","+r_kd.value+"|"+
+p_kp.value+","+p_ki.value+","+p_kd.value+"|"+
+y_kp.value+","+y_ki.value+","+y_kd.value
+);
+}
+
+function saveI2C(){
+ws.send("I2C|"+sda.value+","+scl.value+","+addr.value);
+}
+
+function reset_memory(){
+ws.send("MEMORY");
+}
+
+// ===== CANVAS DRONE =====
+const canvas=document.getElementById("c");
+const ctx=canvas.getContext("2d");
+
+function resize(){
+const rect=canvas.parentElement.getBoundingClientRect();
+canvas.width=rect.width;
+canvas.height=400;
+}
+window.addEventListener("resize",resize);
+resize();
+
+function val(x){
+return parseFloat(x||0)||0;
+}
+
+function draw(){
+ctx.clearRect(0,0,canvas.width,canvas.height);
+
+const cx=canvas.width/2;
+const cy=canvas.height/2;
+
+const roll=val(r.innerText);
+const pitch=val(p.innerText);
+const yaw=val(y.innerText);
+
+const rx=roll*Math.PI/180;
+const ry=pitch*Math.PI/180;
+const rz=yaw*Math.PI/180;
+
+// grid
+ctx.strokeStyle="#0f2a3a";
+for(let i=0;i<canvas.width;i+=40){
+ctx.beginPath();
+ctx.moveTo(i,0);
+ctx.lineTo(i,canvas.height);
+ctx.stroke();
+}
+
+// drone center
+ctx.save();
+ctx.translate(cx,cy);
+ctx.rotate(rz);
+
+// body X
+ctx.strokeStyle="#00ffcc";
+ctx.lineWidth=4;
+
+ctx.beginPath();
+ctx.moveTo(-60,-60);
+ctx.lineTo(60,60);
+ctx.stroke();
+
+ctx.beginPath();
+ctx.moveTo(60,-60);
+ctx.lineTo(-60,60);
+ctx.stroke();
+
+// center
+ctx.fillStyle="#ffcc00";
+ctx.beginPath();
+ctx.arc(0,0,8,0,Math.PI*2);
+ctx.fill();
+
+// motors
+const m=[
+[-60,-60,"M1"],
+[60,-60,"M2"],
+[-60,60,"M3"],
+[60,60,"M4"]
+];
+
+for(let i=0;i<4;i++){
+let x=m[i][0];
+let y=m[i][1] + Math.sin(ry)*20;
+
+ctx.strokeStyle="#fff";
+ctx.beginPath();
+ctx.arc(x,y,12,0,Math.PI*2);
+ctx.stroke();
+
+ctx.fillText(m[i][2],x+15,y-10);
+}
+
+ctx.restore();
+
+// text
+ctx.fillStyle="#fff";
+ctx.fillText("ROLL: "+roll.toFixed(1),10,20);
+ctx.fillText("PITCH: "+pitch.toFixed(1),10,40);
+ctx.fillText("YAW: "+yaw.toFixed(1),10,60);
+
+requestAnimationFrame(draw);
+}
+
+draw();
+
+</script>
+
+</body>
+</html>

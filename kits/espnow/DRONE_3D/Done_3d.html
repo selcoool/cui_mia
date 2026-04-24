@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Drone 3D Roll Pitch Yaw Simulation</title>
+<style>
+body{
+  margin:0;
+  font-family:Arial;
+  background:#0b1020;
+  color:white;
+  display:flex;
+  height:100vh;
+  overflow:hidden;
+}
+.controls{
+  width:280px;
+  padding:16px;
+  background:#111827;
+  box-sizing:border-box;
+}
+canvas{
+  flex:1;
+  background:radial-gradient(circle at center,#0f172a,#050816);
+}
+input{ width:100%; }
+.card{
+  margin-bottom:12px;
+  padding:10px;
+  background:#1f2937;
+  border-radius:8px;
+}
+label{font-size:12px;}
+</style>
+</head>
+<body>
+
+<div class="controls1">
+  <div class="card">
+    <label>Roll</label>
+    <input id="roll" type="range" min="-180" max="180" value="0">
+    <label>Pitch</label>
+    <input id="pitch" type="range" min="-180" max="180" value="0">
+    <label>Yaw</label>
+    <input id="yaw" type="range" min="-180" max="180" value="0">
+  </div>
+</div>
+
+<canvas id="c"></canvas>
+
+<script>
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d');
+
+function resize(){
+  canvas.width=window.innerWidth-280;
+  canvas.height=window.innerHeight;
+}
+window.addEventListener('resize',resize);
+resize();
+
+const rollEl=document.getElementById('roll');
+const pitchEl=document.getElementById('pitch');
+const yawEl=document.getElementById('yaw');
+
+function rad(d){return d*Math.PI/180;}
+
+function rotate3D(x,y,z,rx,ry,rz){
+  let cy=Math.cos(rx), sy=Math.sin(rx);
+  let y1=y*cy - z*sy;
+  let z1=y*sy + z*cy;
+  y=y1; z=z1;
+
+  let cx=Math.cos(ry), sx=Math.sin(ry);
+  let x1=x*cx + z*sx;
+  z1=-x*sx + z*cx;
+  x=x1; z=z1;
+
+  let cz=Math.cos(rz), sz=Math.sin(rz);
+  x1=x*cz - y*sz;
+  y1=x*sz + y*cz;
+
+  return [x1,y1,z];
+}
+
+function project(x,y,z){
+  const f=300;
+  const scale=f/(f+z);
+  return [x*scale,y*scale];
+}
+
+const points=[
+  [-60,0,0],  // M1 left
+  [60,0,0],   // M2 right
+  [0,-60,0],  // M3 front
+  [0,60,0]    // M4 back
+];
+
+function draw(roll,pitch,yaw){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  const cx=canvas.width/2;
+  const cy=canvas.height/2;
+
+  ctx.strokeStyle="#0f2a3a";
+  for(let i=-200;i<=200;i+=20){
+    ctx.beginPath();
+    ctx.moveTo(cx+i,0);
+    ctx.lineTo(cx+i,canvas.height);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(0,cy+i);
+    ctx.lineTo(canvas.width,cy+i);
+    ctx.stroke();
+  }
+
+  const rx=rad(pitch);
+  const ry=rad(roll);
+  const rz=rad(yaw);
+
+  let projected=[];
+
+  for(let p of points){
+    let [x,y,z]=rotate3D(p[0],p[1],p[2],rx,ry,rz);
+    let pr=project(x,y,z+200);
+    projected.push([cx+pr[0],cy+pr[1]]);
+  }
+
+  // arms
+  ctx.strokeStyle="#00ffcc";
+  ctx.lineWidth=3;
+
+  function line(a,b){
+    ctx.beginPath();
+    ctx.moveTo(projected[a][0],projected[a][1]);
+    ctx.lineTo(projected[b][0],projected[b][1]);
+    ctx.stroke();
+  }
+
+  line(0,1);
+  line(2,3);
+
+  // rotors + labels
+  const labels=["M1","M2","M3","M4"];
+
+  for(let i=0;i<4;i++){
+    ctx.beginPath();
+    ctx.arc(projected[i][0],projected[i][1],10,0,Math.PI*2);
+    ctx.stroke();
+
+    ctx.fillStyle="#ffffff";
+    ctx.font="12px Arial";
+    ctx.fillText(labels[i], projected[i][0]+12, projected[i][1]-12);
+  }
+
+  // center
+  ctx.fillStyle="#ffcc00";
+  ctx.beginPath();
+  ctx.arc(cx,cy,6,0,Math.PI*2);
+  ctx.fill();
+
+  ctx.fillStyle="white";
+  ctx.fillText("ROLL:"+roll,10,20);
+  ctx.fillText("PITCH:"+pitch,10,40);
+  ctx.fillText("YAW:"+yaw,10,60);
+}
+
+function loop(){
+  draw(
+    parseFloat(rollEl.value),
+    parseFloat(pitchEl.value),
+    parseFloat(yawEl.value)
+  );
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+
+</body>
+</html>
+
+
+
+<!--<!DOCTYPE html>-->
+<!--<html lang="en">-->
+<!--<head>-->
+<!--<meta charset="UTF-8" />-->
+<!--<title>Drone 3D Roll Pitch Yaw Simulation</title>-->
+<!--<style>-->
+<!--body{-->
+<!--  margin:0;-->
+<!--  font-family:Arial;-->
+<!--  background:#0b1020;-->
+<!--  color:white;-->
+<!--  display:flex;-->
+<!--  height:100vh;-->
+<!--  overflow:hidden;-->
+<!--}-->
+<!--.controls{-->
+<!--  width:280px;-->
+<!--  padding:16px;-->
+<!--  background:#111827;-->
+<!--  box-sizing:border-box;-->
+<!--}-->
+<!--canvas{-->
+<!--  flex:1;-->
+<!--  background:radial-gradient(circle at center,#0f172a,#050816);-->
+<!--}-->
+<!--input{ width:100%; }-->
+<!--.card{-->
+<!--  margin-bottom:12px;-->
+<!--  padding:10px;-->
+<!--  background:#1f2937;-->
+<!--  border-radius:8px;-->
+<!--}-->
+<!--label{font-size:12px;}-->
+<!--</style>-->
+<!--</head>-->
+<!--<body>-->
+
+<!--<div class="controls">-->
+<!--  <div class="card">-->
+<!--    <label>Roll</label>-->
+<!--    <input id="roll" type="range" min="-180" max="180" value="0">-->
+<!--    <label>Pitch</label>-->
+<!--    <input id="pitch" type="range" min="-180" max="180" value="0">-->
+<!--    <label>Yaw</label>-->
+<!--    <input id="yaw" type="range" min="-180" max="180" value="0">-->
+<!--  </div>-->
+<!--</div>-->
+
+<!--<canvas id="c"></canvas>-->
+
+<!--<script>-->
+<!--const canvas=document.getElementById('c');-->
+<!--const ctx=canvas.getContext('2d');-->
+
+<!--function resize(){-->
+<!--  canvas.width=window.innerWidth-280;-->
+<!--  canvas.height=window.innerHeight;-->
+<!--}-->
+<!--window.addEventListener('resize',resize);-->
+<!--resize();-->
+
+<!--const rollEl=document.getElementById('roll');-->
+<!--const pitchEl=document.getElementById('pitch');-->
+<!--const yawEl=document.getElementById('yaw');-->
+
+<!--function rad(d){return d*Math.PI/180;}-->
+
+<!--function rotate3D(x,y,z,rx,ry,rz){-->
+  // X rotation (pitch)
+<!--  let cy=Math.cos(rx), sy=Math.sin(rx);-->
+<!--  let y1=y*cy - z*sy;-->
+<!--  let z1=y*sy + z*cy;-->
+<!--  y=y1; z=z1;-->
+
+  // Y rotation (roll)
+<!--  let cx=Math.cos(ry), sx=Math.sin(ry);-->
+<!--  let x1=x*cx + z*sx;-->
+<!--  z1=-x*sx + z*cx;-->
+<!--  x=x1; z=z1;-->
+
+  // Z rotation (yaw)
+<!--  let cz=Math.cos(rz), sz=Math.sin(rz);-->
+<!--  x1=x*cz - y*sz;-->
+<!--  y1=x*sz + y*cz;-->
+
+<!--  return [x1,y1,z];-->
+<!--}-->
+
+<!--function project(x,y,z){-->
+<!--  const f=300;-->
+<!--  const scale=f/(f+z);-->
+<!--  return [x*scale,y*scale];-->
+<!--}-->
+
+<!--const points=[-->
+<!--  [-60,0,0],[60,0,0],[0,-60,0],[0,60,0]-->
+<!--];-->
+
+<!--function draw(roll,pitch,yaw){-->
+<!--  ctx.clearRect(0,0,canvas.width,canvas.height);-->
+
+<!--  const cx=canvas.width/2;-->
+<!--  const cy=canvas.height/2;-->
+
+  // ground grid
+<!--  ctx.strokeStyle="#0f2a3a";-->
+<!--  for(let i=-200;i<=200;i+=20){-->
+<!--    ctx.beginPath();-->
+<!--    ctx.moveTo(cx+i,0);-->
+<!--    ctx.lineTo(cx+i,canvas.height);-->
+<!--    ctx.stroke();-->
+
+<!--    ctx.beginPath();-->
+<!--    ctx.moveTo(0,cy+i);-->
+<!--    ctx.lineTo(canvas.width,cy+i);-->
+<!--    ctx.stroke();-->
+<!--  }-->
+
+<!--  const rx=rad(pitch);-->
+<!--  const ry=rad(roll);-->
+<!--  const rz=rad(yaw);-->
+
+<!--  let projected=[];-->
+
+<!--  for(let p of points){-->
+<!--    let [x,y,z]=rotate3D(p[0],p[1],p[2],rx,ry,rz);-->
+<!--    let pr=project(x,y,z+200);-->
+<!--    projected.push([cx+pr[0],cy+pr[1]]);-->
+<!--  }-->
+
+  // body cross
+<!--  ctx.strokeStyle="#00ffcc";-->
+<!--  ctx.lineWidth=3;-->
+
+<!--  ctx.beginPath();-->
+<!--  ctx.moveTo(projected[0][0],projected[0][1]);-->
+<!--  ctx.lineTo(projected[1][0],projected[1][1]);-->
+<!--  ctx.stroke();-->
+
+<!--  ctx.beginPath();-->
+<!--  ctx.moveTo(projected[2][0],projected[2][1]);-->
+<!--  ctx.lineTo(projected[3][0],projected[3][1]);-->
+<!--  ctx.stroke();-->
+
+  // rotors
+<!--  for(let p of projected){-->
+<!--    ctx.beginPath();-->
+<!--    ctx.arc(p[0],p[1],10,0,Math.PI*2);-->
+<!--    ctx.stroke();-->
+<!--  }-->
+
+  // center
+<!--  ctx.fillStyle="#ffcc00";-->
+<!--  ctx.beginPath();-->
+<!--  ctx.arc(cx,cy,6,0,Math.PI*2);-->
+<!--  ctx.fill();-->
+
+<!--  ctx.fillStyle="white";-->
+<!--  ctx.fillText("ROLL:"+roll,10,20);-->
+<!--  ctx.fillText("PITCH:"+pitch,10,40);-->
+<!--  ctx.fillText("YAW:"+yaw,10,60);-->
+<!--}-->
+
+<!--function loop(){-->
+<!--  draw(-->
+<!--    parseFloat(rollEl.value),-->
+<!--    parseFloat(pitchEl.value),-->
+<!--    parseFloat(yawEl.value)-->
+<!--  );-->
+<!--  requestAnimationFrame(loop);-->
+<!--}-->
+<!--loop();-->
+<!--</script>-->
+
+<!--</body>-->
+<!--</html>-->

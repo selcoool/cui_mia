@@ -1,0 +1,1453 @@
+
+
+
+#include <Arduino.h>
+#include <WiFi.h>
+#include <esp_now.h>
+#include <WebServer.h>
+#include <Preferences.h>
+#include <WebSocketsServer.h>
+#include <Adafruit_BMP280.h>
+#include <Wire.h>
+
+// ================= WEB =================
+WebServer server(80);
+WebSocketsServer ws(81);
+Preferences prefs;
+
+// ================= DEVICE =================
+String deviceMAC;
+String remoteMAC = "";
+
+// ================= BMP =================
+Adafruit_BMP280 bmp;
+
+float altitude = 0;
+float alt0 = 0;
+float SEA_LEVEL = 1009.5;
+
+float altRaw = 0;
+float altFilt = 0;
+unsigned long lastAltRead = 0;
+bool altReady = false;
+
+
+// ================= PULSE AND PWWM =================
+int PULSE_MIN = 1000;
+int PULSE_MAX = 2000;
+int PWM_MIN = 90;
+int PWM_MAX = 180;
+
+
+// ================= PIN =================
+int SDA_PIN = 8;
+int SCL_PIN = 9;
+int MPU_ADDR = 0x68;
+// #define SDA_PIN 8
+// #define SCL_PIN 9
+// #define MPU_ADDR 0x68
+
+// #define M1_PIN 4
+// #define M2_PIN 5
+// #define M3_PIN 6
+// #define M4_PIN 3
+
+
+int M1_PIN=4;
+int M2_PIN=5;
+int M3_PIN=6;
+int M4_PIN=7;
+
+
+int TrimM1 = 0;
+int TrimM2 = 0;
+int TrimM3 = 5;
+int TrimM4 = 5;
+
+// ================= RX =================
+typedef struct {
+  uint16_t ch[8];
+} PPMData;
+
+PPMData rx;
+
+// ================= FAILSAFE =================
+unsigned long lastRX = 0;
+bool rxFail = true;
+bool prevFail = true;
+
+// ================= ARM =================
+bool lastArm = false;
+
+// ================= STATE =================
+float roll = 0, pitch = 0, yaw = 0;
+float roll0 = 0, pitch0 = 0;
+
+// ================= GYRO =================
+float gx_o = 0, gy_o = 0, gz_o = 0;
+float gz_bias = 0;
+float gz_f = 0;
+
+// ================= PID =================
+struct PID {
+  float kp, ki, kd;
+  float i, last;
+};
+
+PID pidR, pidP, pidY;
+
+
+float altTarget = 0;
+
+// ================= TIME =================
+unsigned long lastT = 0;
+
+// ================= READ MPU =================
+int16_t read16(uint8_t reg){
+  Wire.beginTransmission(MPU_ADDR);
+  Wire.write(reg);
+  Wire.endTransmission(false);
+  Wire.requestFrom(MPU_ADDR, 2);
+  return (Wire.read()<<8) | Wire.read();
+}
+
+// ================= MOTOR =================
+void motorInit(){
+  ledcSetup(0, 400, 8); ledcAttachPin(M1_PIN,0);
+  ledcSetup(1, 400, 8); ledcAttachPin(M2_PIN,1);
+  ledcSetup(2, 400, 8); ledcAttachPin(M3_PIN,2);
+  ledcSetup(3, 400, 8); ledcAttachPin(M4_PIN,3);
+}
+
+String getMac(){
+  uint8_t mac[6];
+  WiFi.macAddress(mac);
+
+  char buf[18];
+  sprintf(buf, "%02X:%02X:%02X:%02X:%02X:%02X",
+          mac[0], mac[1], mac[2],
+          mac[3], mac[4], mac[5]);
+
+  return String(buf);
+}
+
+void setMotor(int ch, float val){
+  ledcWrite(ch, constrain((int)val, 0, 255));
+}
+
+// ================= ESP-NOW =================
+void onRecv(const uint8_t *mac, const uint8_t *data, int len){
+
+  remoteMAC = "";
+  for(int i=0;i<6;i++){
+    char buf[3];
+    sprintf(buf,"%02X", mac[i]);
+    remoteMAC += buf;
+    if(i<5) remoteMAC += ":";
+  }
+  // Serial.print("ESP-NOW from: ");
+  // Serial.println(remoteMAC);
+  memcpy(&rx, data, sizeof(rx));
+  lastRX = millis();
+}
+
+
+// ================= CALIB =================
+void calibrate(){
+  long gx=0, gy=0, gz=0;
+  long ax=0, ay=0, az=0;
+
+  for(int i=0;i<1200;i++){
+    gx += read16(0x43);
+    gy += read16(0x45);
+    gz += read16(0x47);
+
+    ax += read16(0x3B);
+    ay += read16(0x3D);
+    az += read16(0x3F);
+    delay(2);
+  }
+
+  gx_o = gx/1200.0;
+  gy_o = gy/1200.0;
+  gz_o = gz/1200.0;
+
+  float axf=ax/1200.0/16384.0;
+  float ayf=ay/1200.0/16384.0;
+  float azf=az/1200.0/16384.0;
+
+  roll0  = atan2(ayf, azf) * 57.2958;
+  pitch0 = atan2(-axf, sqrt(ayf*ayf + azf*azf)) * 57.2958;
+
+  gz_bias = gz_o / 131.0;
+
+  // ===== ALT CALIB FIX =====
+  alt0 = 0;
+  altReady = false;
+
+  for(int i=0;i<60;i++){
+    alt0 += bmp.readAltitude(SEA_LEVEL);
+    delay(20);
+  }
+
+  alt0 /= 60;
+  altFilt = 0;
+  altitude = 0;
+  altReady = true;
+}
+
+// ================= ALT FIXED =================
+void updateAltitude(){
+
+  if(!altReady) return;
+  if(millis() - lastAltRead < 40) return; // 25Hz
+
+  float raw = bmp.readAltitude(SEA_LEVEL) - alt0;
+
+  // spike filter mạnh hơn
+  if(fabs(raw - altRaw) > 2.5){
+    raw = altRaw;
+  }
+
+  altRaw = raw;
+
+  // low-pass filter (ổn định hơn bản cũ)
+  altFilt = altFilt * 0.9 + raw * 0.1;
+
+  altitude = altFilt;
+
+  lastAltRead = millis();
+}
+
+// ================= PID =================
+float compute(PID &p, float set, float in, float dt){
+  float e = set - in;
+
+  p.i += e * dt;
+  p.i = constrain(p.i, -30, 30);
+
+  float d = (e - p.last) / dt;
+  p.last = e;
+
+  return p.kp*e + p.ki*p.i + p.kd*d;
+
+  
+}
+
+
+// ================= SAVE PULSE AND PWM VALUE =================
+void savePulsePwmValue(){
+  prefs.begin("pulse_pwm", false);
+
+  prefs.putInt("pulse_min", PULSE_MIN);
+  prefs.putInt("pulse_max", PULSE_MAX);
+  prefs.putInt("pwm_min", PWM_MIN);
+  prefs.putInt("pwm_max", PWM_MAX);
+
+  prefs.end();
+}
+
+// ================= LOAD PULSE AND PWM VALUE =================
+void loadPulsePwmValue(){
+  prefs.begin("pulse_pwm", true);
+
+  PULSE_MIN = prefs.getInt("pulse_min", 1000);
+  PULSE_MAX = prefs.getInt("pulse_max", 2000);
+  PWM_MIN = prefs.getInt("pwm_min", 90);
+  PWM_MAX = prefs.getInt("pwm_max", 180);
+
+  prefs.end();
+}
+
+
+// ================= SAVE TRIM VALUE =================
+void saveTrimValue(){
+  prefs.begin("trim", false);
+
+  prefs.putInt("trim1", TrimM1);
+  prefs.putInt("trim2", TrimM2);
+  prefs.putInt("trim3", TrimM3);
+  prefs.putInt("trim4", TrimM4);
+
+  prefs.end();
+}
+
+// ================= LOAD TRIM VALUE =================
+void loadTrimValue(){
+  prefs.begin("trim", true);
+
+  TrimM1 = prefs.getInt("trim1", 0);
+  TrimM2 = prefs.getInt("trim2", 0);
+  TrimM3 = prefs.getInt("trim3", 5);
+  TrimM4 = prefs.getInt("trim4", 5);
+
+  prefs.end();
+}
+
+// ================= SAVE I2C =================
+
+void saveI2C(){
+  prefs.begin("i2c", false);
+
+  prefs.putInt("sda", SDA_PIN);
+  prefs.putInt("scl", SCL_PIN);
+  prefs.putInt("addr", MPU_ADDR);
+
+  prefs.end();
+
+  Serial.println("I2C SAVED ✔");
+}
+
+// ================= LOAD I2C =================
+void loadI2C(){
+  prefs.begin("i2c", true);
+
+  SDA_PIN  = prefs.getInt("sda", 8);
+  SCL_PIN  = prefs.getInt("scl", 9);
+  MPU_ADDR = prefs.getInt("addr", 0x68);
+
+  prefs.end();
+
+  Serial.printf("I2C: SDA=%d SCL=%d ADDR=0x%X\n", SDA_PIN, SCL_PIN, MPU_ADDR);
+}
+
+
+// ================= SAVE PIN =================
+void savePin(){
+  prefs.begin("pin",false);
+  prefs.putInt("m1",M1_PIN);
+ prefs.putInt("m2",M2_PIN);
+ prefs.putInt("m3",M3_PIN);
+ prefs.putInt("m4",M4_PIN);
+  prefs.end();
+}
+
+
+// ================= LOAD PIN =================
+void loadPin(){
+  prefs.begin("pin",true);
+  M1_PIN=prefs.getInt("m1",4);
+  M2_PIN=prefs.getInt("m2",5);
+  M3_PIN=prefs.getInt("m3",6);
+  M4_PIN=prefs.getInt("m4",7);
+  prefs.end();
+}
+
+
+
+
+// ================= SAVE PID =================
+void savePID(){
+  prefs.begin("pid", false);
+
+  prefs.putFloat("r_kp", pidR.kp);
+  prefs.putFloat("r_ki", pidR.ki);
+  prefs.putFloat("r_kd", pidR.kd);
+
+  prefs.putFloat("p_kp", pidP.kp);
+  prefs.putFloat("p_ki", pidP.ki);
+  prefs.putFloat("p_kd", pidP.kd);
+
+  prefs.putFloat("y_kp", pidY.kp);
+  prefs.putFloat("y_ki", pidY.ki);
+  prefs.putFloat("y_kd", pidY.kd);
+
+  prefs.end();
+
+  Serial.println("PID SAVED ✔");
+}
+
+// ================= LOAD PID =================
+void loadPID(){
+  prefs.begin("pid", true);
+
+  pidR.kp=prefs.getFloat("r_kp",3.1);
+  pidR.ki=prefs.getFloat("r_ki",0.0);
+  pidR.kd=prefs.getFloat("r_kd",1.2);
+
+  pidP.kp=prefs.getFloat("p_kp",3.0);
+  pidP.ki=prefs.getFloat("p_ki",0.0);
+  pidP.kd=prefs.getFloat("p_kd",1.2);
+
+  pidY.kp=prefs.getFloat("y_kp",2.0);
+  pidY.ki=prefs.getFloat("y_ki",0.0);
+  pidY.kd=prefs.getFloat("y_kd",0.0);
+
+  prefs.end();
+}
+
+
+
+void clearAll()
+{
+  prefs.begin("i2c", false);
+  prefs.clear();
+  prefs.end();
+
+  prefs.begin("pid", false);
+  prefs.clear();
+  prefs.end();
+
+  prefs.begin("pin", false);
+  prefs.clear();
+  prefs.end();
+
+    prefs.begin("pulse_pwm", false);
+  prefs.clear();
+  prefs.end();
+
+
+    prefs.begin("trim", false);
+  prefs.clear();
+  prefs.end();
+
+
+  Serial.println("I2C + PID CLEARED ✔");
+}
+
+// ================= HTML =================
+const char HTML[] PROGMEM = R"rawliteral(
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FC PRO FIXED</title>
+
+<style>
+body{margin:0;background:#0b0f1a;color:#fff;font-family:Arial;}
+h2{text-align:center;color:#00ffcc;}
+
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;padding:10px;}
+
+.card{background:#1c1f2a;padding:10px;border-radius:10px;}
+.row {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  justify-content: space-evenly;
+}
+
+
+
+
+.bar{height:10px;background:#333;border-radius:5px;overflow:hidden;margin:4px 0;}
+.fill{height:100%;background:#00ffcc;transition:width .15s;}
+.motor .fill{background:#ff3b3b;}
+
+#warn{
+  text-align:center;
+  font-weight:bold;
+  font-size:20px;
+  margin:10px;
+}
+
+
+.card_drone{
+ height:280px;
+   width:280px;
+  margin-bottom:12px;
+  padding:10px;
+  background:#1f2937;
+  border-radius:8px;
+}
+
+// .warn{color:red;text-align:center;display:none;font-weight:bold;}
+</style>
+</head>
+
+<body>
+
+<h2>🚁 FC DRONE CONNECTED</h2>
+<div id="warn" ></div>
+
+<div class="grid">
+
+
+
+
+<div class="card row">
+
+  <div>
+    <h3>ATTITUDE</h3>
+    Roll: <span id="r"></span><br>
+    Pitch: <span id="p"></span><br>
+    Yaw: <span id="y"></span><br>
+    <div class="box">ALT: <span id="alt" class="val">0</span> (m)<br></div>
+  </div>
+
+  <div>
+    <h3>DEVICE</h3>
+    Mac: <span id="mac"></span><br>
+    Remote Mac: <span id="rmac"></span><br>
+  </div>
+
+  <div>
+    <h3>I2C CONFIG</h3>
+    SDA GPIO <input id="sda"><br>
+    SCL GPIO <input id="scl"><br>
+    MPU ADDR <input id="addr"><br>
+    <button onclick="saveI2C()">SAVE I2C</button> <button onclick="reset_memmory()">Reset Memmory</button>
+  </div>
+
+</div>
+
+
+<div class="card">
+<h3>TX</h3>
+CH0 <div class="bar"><div id="ch0" class="fill"></div></div>
+CH1 <div class="bar"><div id="ch1" class="fill"></div></div>
+CH2 <div class="bar"><div id="ch2" class="fill"></div></div>
+CH3 <div class="bar"><div id="ch3" class="fill"></div></div>
+</div>
+
+
+<div class="card row">
+
+<div>
+<h2>PID CONTROL</h2>
+
+ROLL<br>
+KP <input id="r_kp" type="number" step="0.001"><br>
+KI <input id="r_ki" type="number" step="0.001"><br>
+KD <input id="r_kd" type="number" step="0.001"><br><br>
+
+PITCH<br>
+KP <input id="p_kp" type="number" step="0.001"><br>
+KI <input id="p_ki" type="number" step="0.001"><br>
+KD <input id="p_kd" type="number" step="0.001"><br><br>
+
+YAW<br>
+KP <input id="y_kp" type="number" step="0.001"><br>
+KI <input id="y_ki" type="number" step="0.001"><br>
+KD <input id="y_kd" type="number" step="0.001"><br><br>
+
+<button onclick="send()">SAVE PID</button>
+</div>
+
+
+<div>
+   <canvas id="c"></canvas>
+
+</div>
+
+
+</div>
+
+<div class="card">
+<div>
+<h3>MOTORS</h3>
+M1 <div class="bar motor"><div id="m1" class="fill"></div></div>
+M2 <div class="bar motor"><div id="m2" class="fill"></div></div>
+M3 <div class="bar motor"><div id="m3" class="fill"></div></div>
+M4 <div class="bar motor"><div id="m4" class="fill"></div></div>
+</div>
+
+<div>
+
+
+
+<div class="row">
+
+  <div class="card">
+    <h3>PINS</h3>
+    M1 GPIO <input id="pm1"><br>
+    M2 GPIO <input id="pm2"><br>
+    M3 GPIO <input id="pm3"><br>
+    M4 GPIO <input id="pm4"><br>
+    <button onclick="savePin()">APPLY</button>
+  </div>
+
+  <div class="card">
+    <h3>TRIM</h3>
+    TRIM1 <input id="trim1"><br>
+     TRIM2 <input id="trim2"><br>
+     TRIM3 <input id="trim3"><br>
+     TRIM4 <input id="trim4"><br>
+      <button onclick="saveTrim()">APPLY</button>
+  </div>
+
+   <div class="card">
+    <h3>PULSE AND PWM</h3>
+    PULSE MIN <input id="pulse_min"><br>
+    PULSE MAX <input id="pulse_max"><br>
+    PWM MIN <input id="pwm_min"><br>
+    PWM MAX <input id="pwm_max"><br>
+      <button onclick="savePusle_Pwm()">APPLY</button>
+  </div>
+
+</div>
+
+
+<div>
+
+
+
+</div>
+
+</div>
+
+<script>
+const sda = document.getElementById("sda");
+const scl = document.getElementById("scl");
+const addr = document.getElementById("addr");
+
+
+const r = document.getElementById("r");
+const p = document.getElementById("p");
+const y = document.getElementById("y");
+const alt = document.getElementById("alt");
+const mac = document.getElementById("mac");
+const rmac = document.getElementById("rmac");
+const warn = document.getElementById("warn");
+
+
+const r_kp = document.getElementById("r_kp");
+const r_ki = document.getElementById("r_ki");
+const r_kd = document.getElementById("r_kd");
+
+const p_kp = document.getElementById("p_kp");
+const p_ki = document.getElementById("p_ki");
+const p_kd = document.getElementById("p_kd");
+
+
+const y_kp = document.getElementById("y_kp");
+const y_ki = document.getElementById("y_ki");
+const y_kd = document.getElementById("y_kd");
+
+
+
+
+
+const pm1 = document.getElementById("pm1");
+const pm2 = document.getElementById("pm2");
+const pm3 = document.getElementById("pm3");
+const pm4 = document.getElementById("pm4");
+
+const trim1 = document.getElementById("trim1");
+const trim2 = document.getElementById("trim2");
+const trim3 = document.getElementById("trim3");
+const trim4 = document.getElementById("trim4");
+
+const pusle_min = document.getElementById("pusle_min");
+const pusle_max = document.getElementById("pusle_max");
+const pwm_min = document.getElementById("pwm_min");
+const pwm_max = document.getElementById("pwm_max");
+
+
+let ws=new WebSocket("ws://"+location.hostname+":81/");
+
+function clamp(v,min,max){
+  return Math.max(min,Math.min(max,v));
+}
+
+// smooth bar (FIX JITTER)
+let sm=[0,0,0,0,0,0,0,0];
+
+function smooth(i,v){
+  sm[i]=sm[i]*0.7+v*0.3;
+  return sm[i];
+}
+
+// FIX SCALE 1000–2000 → 0–100%
+function bar(id,val){
+  val = clamp(val,0,100);
+  document.getElementById(id).style.width = val + "%";
+}
+
+ws.onmessage=(e)=>{
+
+try {
+    let d = JSON.parse(e.data);
+
+    console.log(d);
+
+    // ===== ATTITUDE =====
+    r.innerText = Number(d.r || 0).toFixed(2);
+    p.innerText = Number(d.p || 0).toFixed(2);
+    y.innerText = Number(d.y || 0).toFixed(2);
+     alt.innerText=Number(d.alt || 0).toFixed(2);
+    
+
+
+    mac.innerText = d.mac || "-";
+    rmac.innerText = d.rmac || "-";
+
+
+    draw(d.r,d.p,d.y); 
+
+
+     if(!window.init){
+
+
+    sda.value =d.sda;
+    scl.value = d.scl;
+    addr.value = d.addr;
+
+   
+
+    r_kp.value=Number(d.r_kp || 0.00).toFixed(2);
+    r_ki.value=Number(d.r_ki || 0.00).toFixed(2);
+    r_kd.value=Number(d.r_kd || 0.00).toFixed(2);
+
+    p_kp.value=Number(d.p_kp || 0.00).toFixed(2);
+    p_ki.value=Number(d.p_ki || 0.00).toFixed(2);
+    p_kd.value=Number(d.p_kd|| 0.00).toFixed(2);
+
+    
+    y_kp.value=Number(d.y_kp || 0.00).toFixed(2);
+    y_ki.value=Number(d.y_ki || 0.00).toFixed(2);
+    y_kd.value= Number(d.y_kd || 0.00).toFixed(2);
+
+
+    pm1.value=d.pm1;
+    pm2.value=d.pm2;
+    pm3.value=d.pm3;
+    pm4.value=d.pm4;
+
+    trim1.value =d.trim1;
+    trim2.value = d.trim2;
+    trim3.value =d.trim3;
+    trim4.value = d.trim4;
+
+    pulse_min.value =d.pulse_min;
+    pulse_max.value = d.pulse_max;
+    pwm_min.value =d.pwm_min;
+    pwm_max.value = d.pwm_max;
+
+
+    window.init=1;
+  }
+
+    // ===== FAILSAFE =====
+
+          if(d.fail){
+        warn.innerText = "⚠ FAILSAFE";
+        warn.style.color = "red";
+      }
+      else if(d.arm){
+        warn.innerText = "ARMED";
+        warn.style.color = "lime";
+      }
+      else{
+        warn.innerText = "UNARMED";
+        warn.style.color = "orange";
+      }
+    //  warn.innerText=d.fail ? "UNARMED" : "ARMED";
+    // // warn.style.display = d.fail ? "block" : "none";
+
+    // ===== TX =====
+    bar("ch0", smooth(0,(d.ch0-1000)/10));
+    bar("ch1", smooth(1,(d.ch1-1000)/10));
+    bar("ch2", smooth(2,(d.ch2-1000)/10));
+    bar("ch3", smooth(3,(d.ch3-1000)/10));
+    
+
+    // ===== MOTORS =====
+    bar("m1", d.m1*100/255);
+    bar("m2", d.m2*100/255);
+    bar("m3", d.m3*100/255);
+    bar("m4", d.m4*100/255);
+
+  } catch (err) {
+    console.log("WS error:", err);
+  }
+};
+
+// ===== SEND I2C =====
+function saveI2C(){
+  ws.send("I2C|" + sda.value + "," + scl.value + "," + addr.value);
+}
+
+// ===== SEND PID =====
+function send(){
+  ws.send(
+    "PID|" +
+    r_kp.value + "," + r_ki.value + "," + r_kd.value + "|" +
+    p_kp.value + "," + p_ki.value + "," + p_kd.value + "|" +
+    y_kp.value + "," + y_ki.value + "," + y_kd.value
+  );
+}
+
+// ===== SEND PULSE AND PWM =====
+function savePusle_Pwm(){
+  ws.send("PULSE_PWM|"+pulse_min.value+","+pulse_max.value+","+pwm_min.value+","+pwm_max.value);
+}
+
+// ===== SEND PIN =====
+function saveTrim(){
+  ws.send("TRIM|"+trim1.value+","+trim2.value+","+trim3.value+","+trim4.value);
+}
+
+
+// ===== SEND PIN =====
+function savePin(){
+  ws.send("PIN|"+pm1.value+","+pm2.value+","+pm3.value+","+pm4.value);
+}
+
+
+function reset_memmory(){
+   ws.send("MEMMORY");
+}
+
+
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const box = canvas.parentElement;
+
+function resize(){
+  const ratio = window.devicePixelRatio || 1;
+
+  canvas.width = box.clientWidth * ratio;
+  canvas.height = box.clientHeight * ratio;
+
+  canvas.style.width = box.clientWidth + "px";
+  canvas.style.height = box.clientHeight + "px";
+
+  ctx.setTransform(ratio,0,0,ratio,0,0);
+}
+
+window.addEventListener('resize', resize);
+resize();
+
+function rad(d){return d*Math.PI/180;}
+
+// 3D rotation
+function rotate3D(x,y,z,rx,ry,rz){
+
+  // yaw Z
+  let cz=Math.cos(rz), sz=Math.sin(rz);
+  [x,y] = [x*cz - y*sz, x*sz + y*cz];
+
+  // pitch Y
+  let cy=Math.cos(ry), sy=Math.sin(ry);
+  [x,z] = [x*cy + z*sy, -x*sy + z*cy];
+
+  // roll X
+  let cx=Math.cos(rx), sx=Math.sin(rx);
+  [y,z] = [y*cx - z*sx, y*sx + z*cx];
+
+  return [x,y,z];
+}
+
+// camera projection (zoom drone nhỏ lại)
+function project(x,y,z){
+  const f = 160;   // 🔥 giảm để drone nhỏ hơn
+  const scale = f/(f+z);
+  return [x*scale, y*scale];
+}
+
+// drone points
+const points=[
+  [-60,0,0],  // M1
+  [60,0,0],   // M2
+  [0,-60,0],  // M3
+  [0,60,0]    // M4
+];
+
+function draw(roll,pitch,yaw){
+
+  ctx.clearRect(0,0,box.clientWidth,box.clientHeight);
+
+  const cx = box.clientWidth/2;
+  const cy = box.clientHeight/2;
+
+  // background grid
+  ctx.strokeStyle="#0f2a3a";
+  ctx.lineWidth=1;
+
+  for(let i=-200;i<=200;i+=25){
+    ctx.beginPath();
+    ctx.moveTo(cx+i,0);
+    ctx.lineTo(cx+i,box.clientHeight);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(0,cy+i);
+    ctx.lineTo(box.clientWidth,cy+i);
+    ctx.stroke();
+  }
+
+  const rx = rad(roll);
+  const ry = rad(pitch);
+  const rz = rad(yaw);
+
+  let p2d=[];
+
+  for(let p of points){
+    let [x,y,z] = rotate3D(p[0],p[1],p[2],rx,ry,rz);
+    let pr = project(x,y,z+180);
+    p2d.push([cx+pr[0], cy+pr[1]]);
+  }
+
+  // arms
+  ctx.strokeStyle="#00ffcc";
+  ctx.lineWidth=3;
+
+  function line(a,b){
+    ctx.beginPath();
+    ctx.moveTo(p2d[a][0],p2d[a][1]);
+    ctx.lineTo(p2d[b][0],p2d[b][1]);
+    ctx.stroke();
+  }
+
+  line(0,1);
+  line(2,3);
+
+  // motors
+  const labels=["M1","M2","M3","M4"];
+
+  for(let i=0;i<4;i++){
+    ctx.beginPath();
+    ctx.arc(p2d[i][0],p2d[i][1],8,0,Math.PI*2);
+    ctx.strokeStyle="#fff";
+    ctx.stroke();
+
+    ctx.fillStyle="#fff";
+    ctx.font="12px Arial";
+    ctx.fillText(labels[i],p2d[i][0]+8,p2d[i][1]-8);
+  }
+
+  // center
+  ctx.fillStyle="#ffcc00";
+  ctx.beginPath();
+  ctx.arc(cx,cy,5,0,Math.PI*2);
+  ctx.fill();
+
+  // debug text
+  ctx.fillStyle="#fff";
+  ctx.fillText("R:"+roll.toFixed(1),10,20);
+  ctx.fillText("P:"+pitch.toFixed(1),10,40);
+  ctx.fillText("Y:"+yaw.toFixed(1),10,60);
+}
+
+
+</script>
+
+</body>
+</html>
+)rawliteral";
+
+
+
+
+
+
+//=================
+
+const char HTML1[] PROGMEM = R"rawliteral(
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FC PRO FIXED</title>
+
+<style>
+body{margin:0;background:#0b0f1a;color:#fff;font-family:Arial;}
+h2{text-align:center;color:#00ffcc;}
+
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;padding:10px;}
+
+.card{background:#1c1f2a;padding:10px;border-radius:10px;}
+.row{
+  display:flex;
+  gap:20px;
+  flex-wrap:wrap;
+  align-items:flex-start;
+}
+
+// .row{display:flex;justify-content:center;gap:10px;flex-wrap:wrap}
+
+.bar{height:10px;background:#333;border-radius:5px;overflow:hidden;margin:4px 0;}
+.fill{height:100%;background:#00ffcc;transition:width .15s;}
+.motor .fill{background:#ff3b3b;}
+
+#warn{
+  text-align:center;
+  font-weight:bold;
+  font-size:20px;
+  margin:10px;
+}
+
+// .warn{color:red;text-align:center;display:none;font-weight:bold;}
+</style>
+</head>
+
+<body>
+
+<h2>🚁 FC DRONE RESET</h2>
+<div id="warn" ></div>
+
+<div class="grid">
+
+<div class="card">
+
+ <button onclick="reset_memmory()">Reset Memmory</button>
+
+</div>
+
+</div>
+
+<script>
+
+
+let ws=new WebSocket("ws://"+location.hostname+":81/");
+
+ws.onmessage=(e)=>{
+
+try {
+    let d = JSON.parse(e.data);
+
+    
+    console.log("dddddd:", d);
+    
+
+  } catch (err) {
+    console.log("WS error:", err);
+  }
+};
+
+
+function reset_memmory(){
+   ws.send("MEMMORY");
+}
+
+</script>
+
+</body>
+</html>
+)rawliteral";
+
+// ================= WEB =================
+// void handleRoot(){
+//   server.send_P(200,"text/html",HTML);
+// }
+
+// ================= WS =================
+void onWs(uint8_t num,WStype_t type,uint8_t *payload,size_t len){
+
+  if(type==WStype_TEXT){
+
+    String msg=(char*)payload;
+
+    if(msg.startsWith("PID|")){
+
+      String d=msg.substring(4);
+
+      int a=d.indexOf('|');
+      int b=d.indexOf('|',a+1);
+
+      String r=d.substring(0,a);
+      String p=d.substring(a+1,b);
+      String y=d.substring(b+1);
+
+      pidR.kp=r.substring(0,r.indexOf(',')).toFloat();
+      pidR.ki=r.substring(r.indexOf(',')+1,r.lastIndexOf(',')).toFloat();
+      pidR.kd=r.substring(r.lastIndexOf(',')+1).toFloat();
+
+      pidP.kp=p.substring(0,p.indexOf(',')).toFloat();
+      pidP.ki=p.substring(p.indexOf(',')+1,p.lastIndexOf(',')).toFloat();
+      pidP.kd=p.substring(p.lastIndexOf(',')+1).toFloat();
+
+      pidY.kp=y.substring(0,y.indexOf(',')).toFloat();
+      pidY.ki=y.substring(y.indexOf(',')+1,y.lastIndexOf(',')).toFloat();
+      pidY.kd=y.substring(y.lastIndexOf(',')+1).toFloat();
+
+      savePID();   // 🔥 IMPORTANT FIX
+    }
+
+     if(msg.startsWith("PIN|")){
+      String d=msg.substring(4);
+
+      int a=d.indexOf(',');
+      int b=d.indexOf(',',a+1);
+      int c=d.indexOf(',',b+1);
+
+      M1_PIN=d.substring(0,a).toInt();
+      M2_PIN=d.substring(a+1,b).toInt();
+      M3_PIN=d.substring(b+1,c).toInt();
+      M4_PIN=d.substring(c+1).toInt();
+
+      savePin();
+      motorInit();   // 🔥 rebind PWM
+      return;
+    }
+
+
+    if(msg.startsWith("I2C|")){
+    String d = msg.substring(4);
+
+    int a = d.indexOf(',');
+    int b = d.indexOf(',', a+1);
+
+    SDA_PIN  = d.substring(0, a).toInt();
+    SCL_PIN  = d.substring(a+1, b).toInt();
+    MPU_ADDR = strtol(d.substring(b+1).c_str(), NULL, 0); // hỗ trợ 0x68
+
+    saveI2C();
+
+    Serial.println("Restart to apply I2C...");
+    delay(500);
+    ESP.restart();   // 🔥 bắt buộc
+    }
+
+
+    if(msg.startsWith("MEMMORY")){
+
+    clearAll();   // xoá NVS
+
+    // ===== RESET RUNTIME =====
+    pidR.i = pidP.i = pidY.i = 0;
+    pidR.last = pidP.last = pidY.last = 0;
+
+    roll = pitch = yaw = 0;
+    gz_bias = 0;
+    gz_f = 0;
+
+    alt0 = 0;
+    altFilt = 0;
+    altitude = 0;
+
+    lastRX = millis();
+    rxFail = true;
+    lastArm = false;
+
+    Serial.println("MEMMORY RESET ✔");
+
+    delay(300);
+    ESP.restart();   // 🔥 nên restart luôn
+    }
+
+
+    if(msg.startsWith("TRIM|")){
+    String d = msg.substring(5);
+
+    int a = d.indexOf(',');
+    int b = d.indexOf(',', a+1);
+    int c = d.indexOf(',', b+1);
+
+    TrimM1 = d.substring(0,a).toInt();
+    TrimM2 = d.substring(a+1,b).toInt();
+    TrimM3 = d.substring(b+1,c).toInt();
+    TrimM4 = d.substring(c+1).toInt();
+
+    saveTrimValue();
+
+    Serial.println("TRIM SAVED ✔");
+    }
+
+
+      
+
+    if(msg.startsWith("PULSE_PWM|")){
+    String d = msg.substring(5);
+
+    int a = d.indexOf(',');
+    int b = d.indexOf(',', a+1);
+    int c = d.indexOf(',', b+1);
+
+    PULSE_MIN = d.substring(0,a).toInt();
+    PULSE_MAX = d.substring(a+1,b).toInt();
+    PWM_MIN = d.substring(b+1,c).toInt();
+    PWM_MAX = d.substring(c+1).toInt();
+
+    saveTrimValue();
+
+    Serial.println("PULSW AND PWM SAVED ✔");
+    }
+
+
+
+    
+
+  }
+}
+
+// ================= SETUP =================
+void setup(){
+  Serial.begin(115200);
+  deviceMAC = getMac();
+ 
+  loadI2C();
+  // Wire.setPins(SDA_PIN, SCL_PIN);
+
+    Wire.setPins(8, 9);
+  Wire.begin();
+  Wire.setClock(400000);
+
+  Wire.beginTransmission(MPU_ADDR);
+  Wire.write(0x6B);
+  Wire.write(0);
+  Wire.endTransmission();
+
+
+ // BMP
+//    bmp.begin(0x76);
+
+if(!bmp.begin(0x76))
+{ Serial.println("BMP FAIL");
+ } 
+else { 
+Serial.println("BMP OK"); 
+bmp.setSampling( 
+Adafruit_BMP280::MODE_NORMAL, 
+Adafruit_BMP280::SAMPLING_X2,
+ Adafruit_BMP280::SAMPLING_X16, 
+Adafruit_BMP280::FILTER_X16,
+ Adafruit_BMP280::STANDBY_MS_63 ); 
+}
+
+
+
+  loadTrimValue();
+  loadPin();
+
+  motorInit();
+  loadPID();
+  calibrate();
+
+  
+
+  WiFi.mode(WIFI_AP_STA);
+  WiFi.softAP("FC-DRONE","12345678");
+
+
+
+  esp_now_init();
+  esp_now_register_recv_cb(onRecv);
+
+  // server.on("/",handleRoot);
+
+   server.on("/",[](void){
+    server.send_P(200,"text/html",HTML);
+  });
+
+    server.on("/reset_saving",[](void){
+    server.send_P(200,"text/html",HTML1);
+  });
+  server.begin();
+
+  ws.begin();
+  ws.onEvent(onWs);
+
+  lastRX = millis();
+}
+
+// ================= LOOP =================
+void loop(){
+  server.handleClient();
+  ws.loop();
+  float dt = (micros() - lastT) * 1e-6;
+  lastT = micros();
+  if(dt <= 0 || dt > 0.05) dt = 0.01;
+
+  // ================= FAILSAFE =================
+  rxFail = (millis() - lastRX > 400);
+
+  if(rxFail){
+    setMotor(0,0);
+    setMotor(1,0);
+    setMotor(2,0);
+    setMotor(3,0);
+
+    roll = pitch = yaw = 0;
+    gz_bias = 0;
+
+    pidR.i = pidP.i = pidY.i = 0;
+
+    prevFail = true;
+    return;
+  }
+
+  if(prevFail && !rxFail){
+    yaw = 0;
+    gz_bias = 0;
+    pidR.i = pidP.i = pidY.i = 0;
+    prevFail = false;
+  }
+
+  // ================= MPU =================
+  float gx = (read16(0x43) - gx_o) / 131.0;
+  float gy = (read16(0x45) - gy_o) / 131.0;
+  float gz = (read16(0x47) - gz_o) / 131.0;
+
+  float ax = read16(0x3B) / 16384.0;
+  float ay = read16(0x3D) / 16384.0;
+  float az = read16(0x3F) / 16384.0;
+
+  float accRoll  = atan2(ay, az) * 57.2958 - roll0;
+  float accPitch = atan2(-ax, sqrt(ay*ay + az*az)) * 57.2958 - pitch0;
+
+  // ================= FILTER =================
+  gz_f = gz_f * 0.9 + gz * 0.1;
+
+  // ================= ARM =================
+  bool arm = rx.ch[4] > 1600;
+
+  // 🔥 ARM → CALIB
+  if(arm && !lastArm){
+    Serial.println("ARM -> CALIB");
+   
+
+  
+    calibrate();
+   
+
+    roll = pitch = yaw = 0;
+    gz_bias = 0;
+    gz_f = 0;
+
+    pidR.i = pidP.i = pidY.i = 0;
+    pidR.last = pidP.last = pidY.last = 0;
+
+    delay(500);
+  }
+
+  lastArm = arm;
+
+  // ================= AUTO BIAS =================
+  if(arm && fabs(gz) < 1.0){
+    gz_bias = gz_bias * 0.999 + gz * 0.001;
+  }
+
+  float gz_corr = gz_f - gz_bias;
+  if(fabs(gz_corr) < 0.02) gz_corr = 0;
+
+  // ================= ANGLE =================
+  roll  = 0.98 * (roll  + gx * dt) + 0.02 * accRoll;
+  pitch = 0.98 * (pitch + gy * dt) + 0.02 * accPitch;
+  yaw += gz_corr * dt;
+
+  
+
+
+  if(yaw > 180) yaw -= 360;
+  if(yaw < -180) yaw += 360;
+
+  updateAltitude();
+
+float altHold = 0;
+
+
+
+
+  // ================= RC =================
+  float throttle = map(rx.ch[0], PULSE_MIN, PULSE_MAX, PWM_MIN, PWM_MAX);
+
+  float rollSet  = (rx.ch[3] - 1500) / 10.0;
+  float pitchSet = (rx.ch[2] - 1500) / 10.0;
+  float yawSet   = (rx.ch[1] - 1500) / 20.0;
+
+  float m1=0,m2=0,m3=0,m4=0;
+
+  if(arm){
+
+    
+
+
+//   // setpoint từ RC (CH5 ví dụ - giữ cao)
+//   if(rx.ch[5] > 1500){
+//     altTarget = altitude; // giữ độ cao hiện tại
+//   }
+
+//   float altOut = compute(pidAlt, altTarget, altitude, dt);
+
+//   // giới hạn lực
+//   altOut = constrain(altOut, -30, 30);
+
+//   // cộng vào throttle
+//   throttle += altOut;
+
+
+
+
+    float rOut = compute(pidR, rollSet, roll, dt);
+    float pOut = compute(pidP, pitchSet, pitch, dt);
+    float yOut = compute(pidY, yawSet, yaw, dt);
+
+    rOut = constrain(rOut,-40,40);
+    pOut = constrain(pOut,-40,40);
+    yOut = constrain(yOut,-25,25);
+
+    m1 = throttle + pOut + rOut - yOut + TrimM1;
+    m2 = throttle + pOut - rOut + yOut + TrimM2;
+    m3 = throttle - pOut - rOut - yOut + TrimM3;
+    m4 = throttle - pOut + rOut + yOut + TrimM4;
+
+  }
+
+  setMotor(0,m1);
+  setMotor(1,m2);
+  setMotor(2,m3);
+  setMotor(3,m4);
+
+ String json="{";
+
+json+="\"sda\":"+String(SDA_PIN)+",";
+json+="\"scl\":"+String(SCL_PIN)+",";
+json+="\"addr\":\"0x"+String(MPU_ADDR, HEX)+"\",";
+
+json+="\"r\":"+String(roll)+",";
+json+="\"p\":"+String(pitch)+",";
+json+="\"y\":"+String(yaw)+",";
+json+="\"alt\":"+String(altitude,2)+",";  // ✅ FIX ở đây
+json+="\"mac\":\""+deviceMAC+"\",";
+json+="\"rmac\":\""+remoteMAC+"\",";
+json+="\"fail\":"+String(rxFail)+",";
+json+="\"arm\":"+String(arm)+",";
+
+json+="\"r_kp\":"+String(pidR.kp)+",";
+json+="\"r_ki\":"+String(pidR.ki)+",";
+json+="\"r_kd\":"+String(pidR.kd)+",";
+
+json+="\"p_kp\":"+String(pidP.kp)+",";
+json+="\"p_ki\":"+String(pidP.ki)+",";
+json+="\"p_kd\":"+String(pidP.kd)+",";
+
+json+="\"y_kp\":"+String(pidY.kp)+",";
+json+="\"y_ki\":"+String(pidY.ki)+",";
+json+="\"y_kd\":"+String(pidY.kd)+",";
+
+json+="\"ch0\":"+String(rx.ch[0])+",";
+json+="\"ch1\":"+String(rx.ch[1])+",";
+json+="\"ch2\":"+String(rx.ch[2])+",";
+json+="\"ch3\":"+String(rx.ch[3])+",";
+json+="\"m1\":"+String(m1)+",";
+json+="\"m2\":"+String(m2)+",";
+json+="\"m3\":"+String(m3)+",";
+json+="\"m4\":"+String(m4)+",";
+
+json+="\"trim1\":"+String(TrimM1)+",";
+json+="\"trim2\":"+String(TrimM2)+",";
+json+="\"trim3\":"+String(TrimM3)+",";
+json+="\"trim4\":"+String(TrimM4)+",";
+
+json+="\"pulse_min\":"+String(PULSE_MIN)+",";
+json+="\"pulse_max\":"+String(PULSE_MAX)+",";
+json+="\"pwm_min\":"+String(PWM_MIN)+",";
+json+="\"pwm_max\":"+String(PWM_MAX)+",";
+
+json+="\"pm1\":"+String(M1_PIN)+",";
+json+="\"pm2\":"+String(M2_PIN)+",";
+json+="\"pm3\":"+String(M3_PIN)+",";
+json+="\"pm4\":"+String(M4_PIN);
+json+="}";
+  ws.broadcastTXT(json);
+
+  // ================= DEBUG =================
+  Serial.print("R:"); Serial.print(roll);
+  Serial.print(" P:"); Serial.print(pitch);
+  Serial.print(" Y:"); Serial.print(yaw);
+  Serial.print(" ARM:"); Serial.print(arm);
+
+  Serial.print(" deviceMAC:"); Serial.print(deviceMAC);
+
+  //  Serial.print(" pppppppppp:"); Serial.print( rx.ch[5]);
+  Serial.print(" FAIL:"); Serial.print(rxFail);
+
+  Serial.print(" M1:"); Serial.print(m1);
+  Serial.print(" M2:"); Serial.print(m2);
+  Serial.print(" M3:"); Serial.print(m3);
+  Serial.print(" M4:"); Serial.println(m4);
+}

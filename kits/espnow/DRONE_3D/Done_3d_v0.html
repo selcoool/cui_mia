@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Drone 3D Roll Pitch Yaw Simulation (Fixed Axes)</title>
+<style>
+body{
+  margin:0;
+  font-family:Arial;
+  background:#0b1020;
+  color:white;
+  display:flex;
+  height:100vh;
+  overflow:hidden;
+}
+.controls{
+  width:280px;
+  padding:16px;
+  background:#111827;
+  box-sizing:border-box;
+}
+canvas{
+  flex:1;
+  background:radial-gradient(circle at center,#0f172a,#050816);
+}
+input{ width:100%; }
+.card{
+  margin-bottom:12px;
+  padding:10px;
+  background:#1f2937;
+  border-radius:8px;
+}
+label{font-size:12px;}
+</style>
+</head>
+<body>
+
+<!--<div class="controls">-->
+  <div class="card">
+    <label>Roll (X)</label>
+    <input id="roll" type="range" min="-180" max="180" value="0">
+    <label>Pitch (Y)</label>
+    <input id="pitch" type="range" min="-180" max="180" value="0">
+    <label>Yaw (Z)</label>
+    <input id="yaw" type="range" min="-180" max="180" value="136">
+  </div>
+<!--</div>-->
+
+<canvas id="c"></canvas>
+
+<script>
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d');
+
+function resize(){
+  canvas.width=window.innerWidth-280;
+  canvas.height=window.innerHeight;
+}
+window.addEventListener('resize',resize);
+resize();
+
+const rollEl=document.getElementById('roll');
+const pitchEl=document.getElementById('pitch');
+const yawEl=document.getElementById('yaw');
+
+function rad(d){return d*Math.PI/180;}
+
+// FIXED AXIS ORDER: YAW(Z) -> PITCH(Y) -> ROLL(X)
+function rotate3D(x,y,z,rx,ry,rz){
+
+  // yaw (Z axis)
+  let cz=Math.cos(rz), sz=Math.sin(rz);
+  let x1=x*cz - y*sz;
+  let y1=x*sz + y*cz;
+  x=x1; y=y1;
+
+  // pitch (Y axis)
+  let cy=Math.cos(ry), sy=Math.sin(ry);
+  let x2=x*cy + z*sy;
+  let z2=-x*sy + z*cy;
+  x=x2; z=z2;
+
+  // roll (X axis)
+  let cx=Math.cos(rx), sx=Math.sin(rx);
+  let y2=y*cx - z*sx;
+  let z3=y*sx + z*cx;
+
+  return [x,y2,z3];
+}
+
+function project(x,y,z){
+  const f=320;
+  const scale=f/(f+z);
+  return [x*scale,y*scale];
+}
+
+const points=[
+  [-60,0,0],  // M1
+  [60,0,0],   // M2
+  [0,-60,0],  // M3
+  [0,60,0]    // M4
+];
+
+function draw(roll,pitch,yaw){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  const cx=canvas.width/2;
+  const cy=canvas.height/2;
+
+  // grid
+  ctx.strokeStyle="#0f2a3a";
+  for(let i=-200;i<=200;i+=20){
+    ctx.beginPath();
+    ctx.moveTo(cx+i,0);
+    ctx.lineTo(cx+i,canvas.height);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(0,cy+i);
+    ctx.lineTo(canvas.width,cy+i);
+    ctx.stroke();
+  }
+
+  const rx=rad(roll);
+  const ry=rad(pitch);
+  const rz=rad(yaw);
+
+  let projected=[];
+
+  for(let p of points){
+    let [x,y,z]=rotate3D(p[0],p[1],p[2],rx,ry,rz);
+    let pr=project(x,y,z+220);
+    projected.push([cx+pr[0],cy+pr[1]]);
+  }
+
+  // arms
+  ctx.strokeStyle="#00ffcc";
+  ctx.lineWidth=3;
+
+  function line(a,b){
+    ctx.beginPath();
+    ctx.moveTo(projected[a][0],projected[a][1]);
+    ctx.lineTo(projected[b][0],projected[b][1]);
+    ctx.stroke();
+  }
+
+  line(0,1);
+  line(2,3);
+
+  // motors
+  const labels=["M1","M2","M3","M4"];
+
+  for(let i=0;i<4;i++){
+    ctx.beginPath();
+    ctx.arc(projected[i][0],projected[i][1],10,0,Math.PI*2);
+    ctx.stroke();
+
+    ctx.fillStyle="#fff";
+    ctx.font="12px Arial";
+    ctx.fillText(labels[i],projected[i][0]+10,projected[i][1]-10);
+  }
+
+  // center
+  ctx.fillStyle="#ffcc00";
+  ctx.beginPath();
+  ctx.arc(cx,cy,6,0,Math.PI*2);
+  ctx.fill();
+
+  ctx.fillStyle="#fff";
+  ctx.fillText("ROLL: "+roll.toFixed(1),10,20);
+  ctx.fillText("PITCH: "+pitch.toFixed(1),10,40);
+  ctx.fillText("YAW: "+yaw.toFixed(1),10,60);
+}
+
+function loop(){
+  draw(
+    parseFloat(rollEl.value),
+    parseFloat(pitchEl.value),
+    parseFloat(yawEl.value)
+  
+  );
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+
+</body>
+</html>
