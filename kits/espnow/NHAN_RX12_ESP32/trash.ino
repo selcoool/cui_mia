@@ -35,8 +35,16 @@ bool altReady = false;
 // ================= PULSE AND PWWM =================
 int PULSE_MIN = 1000;
 int PULSE_MAX = 2000;
-int PWM_MIN = 90;
-int PWM_MAX = 180;
+int PWM_MIN = 5;
+int PWM_MAX = 20;
+
+
+
+// ================= MOTOR POSITION =================
+int POSITION_M1 = 0;
+int POSITION_M2 = 1;
+int POSITION_M3 = 2;
+int POSITION_M4 = 3;
 
 
 // ================= PIN =================
@@ -53,10 +61,10 @@ int MPU_ADDR = 0x68;
 // #define M4_PIN 3
 
 
-int M1_PIN=4;
-int M2_PIN=5;
-int M3_PIN=6;
-int M4_PIN=7;
+int M1_PIN=3;
+int M2_PIN=4;
+int M3_PIN=5;
+int M4_PIN=6;
 
 
 int TrimM1 = 0;
@@ -235,6 +243,33 @@ float compute(PID &p, float set, float in, float dt){
 }
 
 
+// ================= SAVE MOTOR POSITION VALUE =================
+void saveMotorPositionValue(){
+  prefs.begin("motor_position", false);
+
+  prefs.putInt("position_m1", POSITION_M1);
+  prefs.putInt("position_m2", POSITION_M2);
+  prefs.putInt("position_m3", POSITION_M3);
+  prefs.putInt("position_m4", POSITION_M4);
+
+  prefs.end();
+}
+
+// ================= LOAD  MOTOR POSITION VALUE =================
+void loadMotorPositionValue(){
+  prefs.begin("motor_position", true);
+
+  POSITION_M1 = prefs.getInt("position_m1", 0);
+  POSITION_M2 = prefs.getInt("position_m2", 1);
+  POSITION_M3 = prefs.getInt("position_m3", 2);
+  POSITION_M4 = prefs.getInt("position_m4", 3);
+
+  prefs.end();
+}
+
+
+
+
 // ================= SAVE PULSE AND PWM VALUE =================
 void savePulsePwmValue(){
   prefs.begin("pulse_pwm", false);
@@ -253,8 +288,8 @@ void loadPulsePwmValue(){
 
   PULSE_MIN = prefs.getInt("pulse_min", 1000);
   PULSE_MAX = prefs.getInt("pulse_max", 2000);
-  PWM_MIN = prefs.getInt("pwm_min", 90);
-  PWM_MAX = prefs.getInt("pwm_max", 180);
+  PWM_MIN = prefs.getInt("pwm_min", 10);
+  PWM_MAX = prefs.getInt("pwm_max", 50);
 
   prefs.end();
 }
@@ -326,10 +361,10 @@ void savePin(){
 // ================= LOAD PIN =================
 void loadPin(){
   prefs.begin("pin",true);
-  M1_PIN=prefs.getInt("m1",4);
-  M2_PIN=prefs.getInt("m2",5);
-  M3_PIN=prefs.getInt("m3",6);
-  M4_PIN=prefs.getInt("m4",7);
+  M1_PIN=prefs.getInt("m1",3);
+  M2_PIN=prefs.getInt("m2",4);
+  M3_PIN=prefs.getInt("m3",5);
+  M4_PIN=prefs.getInt("m4",6);
   prefs.end();
 }
 
@@ -361,15 +396,15 @@ void savePID(){
 void loadPID(){
   prefs.begin("pid", true);
 
-  pidR.kp=prefs.getFloat("r_kp",3.1);
+  pidR.kp=prefs.getFloat("r_kp",0.0);
   pidR.ki=prefs.getFloat("r_ki",0.0);
-  pidR.kd=prefs.getFloat("r_kd",1.2);
+  pidR.kd=prefs.getFloat("r_kd",0.0);
 
-  pidP.kp=prefs.getFloat("p_kp",3.0);
+  pidP.kp=prefs.getFloat("p_kp",0.0);
   pidP.ki=prefs.getFloat("p_ki",0.0);
-  pidP.kd=prefs.getFloat("p_kd",1.2);
+  pidP.kd=prefs.getFloat("p_kd",0.0);
 
-  pidY.kp=prefs.getFloat("y_kp",2.0);
+  pidY.kp=prefs.getFloat("y_kp",0.0);
   pidY.ki=prefs.getFloat("y_ki",0.0);
   pidY.kd=prefs.getFloat("y_kd",0.0);
 
@@ -452,7 +487,15 @@ h2{text-align:center;color:#00ffcc;}
 
 <div class="card row">
 
+
   <div>
+    <h3>DEVICE</h3>
+    Mac: <span id="mac"></span><br>
+    Remote Mac: <span id="rmac"></span><br>
+  </div>
+
+
+    <div>
     <h3>ATTITUDE</h3>
     Roll: <span id="r"></span><br>
     Pitch: <span id="p"></span><br>
@@ -460,11 +503,6 @@ h2{text-align:center;color:#00ffcc;}
     <div class="box">ALT: <span id="alt" class="val">0</span> (m)<br></div>
   </div>
 
-  <div>
-    <h3>DEVICE</h3>
-    Mac: <span id="mac"></span><br>
-    Remote Mac: <span id="rmac"></span><br>
-  </div>
 
   <div>
     <h3>I2C CONFIG</h3>
@@ -478,11 +516,29 @@ h2{text-align:center;color:#00ffcc;}
 
 
 <div class="card">
+<div>
 <h3>TX</h3>
 CH0 <div class="bar"><div id="ch0" class="fill"></div></div>
 CH1 <div class="bar"><div id="ch1" class="fill"></div></div>
 CH2 <div class="bar"><div id="ch2" class="fill"></div></div>
 CH3 <div class="bar"><div id="ch3" class="fill"></div></div>
+</div>
+
+
+<div class="row">
+
+   <div class="card">
+    <h3>PULSE AND PWM</h3>
+    PULSE MIN <input id="pulse_min"><br>
+    PULSE MAX <input id="pulse_max"><br>
+    PWM MIN <input id="pwm_min"><br>
+    PWM MAX <input id="pwm_max"><br>
+      <button onclick="savePusle_Pwm()">APPLY</button>
+  </div>
+
+</div>
+
+
 </div>
 
 
@@ -531,6 +587,15 @@ M4 <div class="bar motor"><div id="m4" class="fill"></div></div>
     <button onclick="savePin()">APPLY</button>
   </div>
 
+    <div class="card">
+    <h3>MOTOR POSITION</h3>
+    POSITION M1 <input id="position_m1"><br>
+   POSITION M2 <input id="position_m2"><br>
+    POSITION M3 <input id="position_m3"><br>
+   POSITION M4 <input id="position_m4"><br>
+    <button onclick="saveMotorPosition()">APPLY</button>
+   </div>
+
   <div class="card">
     <h3>TRIM</h3>
     TRIM1 <input id="trim1"><br>
@@ -540,14 +605,8 @@ M4 <div class="bar motor"><div id="m4" class="fill"></div></div>
       <button onclick="saveTrim()">APPLY</button>
   </div>
 
-   <div class="card">
-    <h3>PULSE AND PWM</h3>
-    PULSE MIN <input id="pulse_min"><br>
-    PULSE MAX <input id="pulse_max"><br>
-    PWM MIN <input id="pwm_min"><br>
-    PWM MAX <input id="pwm_max"><br>
-      <button onclick="savePusle_Pwm()">APPLY</button>
-  </div>
+  
+
 
 </div>
 
@@ -596,6 +655,12 @@ const pm1 = document.getElementById("pm1");
 const pm2 = document.getElementById("pm2");
 const pm3 = document.getElementById("pm3");
 const pm4 = document.getElementById("pm4");
+
+
+const motor_m1 = document.getElementById("motor_m1");
+const motor_m2 = document.getElementById("motor_m2");
+const motor_m3 = document.getElementById("motor_m3");
+const motor_m4 = document.getElementById("motor_m4");
 
 const trim1 = document.getElementById("trim1");
 const trim2 = document.getElementById("trim2");
@@ -675,6 +740,12 @@ try {
     pm3.value=d.pm3;
     pm4.value=d.pm4;
 
+
+    position_m1.value=d.position_m1;
+    position_m2.value=d.position_m2;
+    position_m3.value=d.position_m3;
+    position_m4.value=d.position_m4;
+
     trim1.value =d.trim1;
     trim2.value = d.trim2;
     trim3.value =d.trim3;
@@ -742,6 +813,13 @@ function send(){
 // ===== SEND PULSE AND PWM =====
 function savePusle_Pwm(){
   ws.send("PULSE_PWM|"+pulse_min.value+","+pulse_max.value+","+pwm_min.value+","+pwm_max.value);
+}
+
+
+
+// ===== SEND MOTOR POSOTION =====
+function saveMotorPosition(){
+  ws.send("MOTOR_POSITION|"+position_m1.value+","+position_m2.value+","+position_m3.value+","+position_m4.value);
 }
 
 // ===== SEND PIN =====
@@ -909,7 +987,8 @@ void onWs(uint8_t num,WStype_t type,uint8_t *payload,size_t len){
 
       savePin();
       motorInit();   // 🔥 rebind PWM
-      return;
+      // return;
+       ESP.restart();   // 🔥 bắt buộc
     }
 
 
@@ -976,10 +1055,27 @@ void onWs(uint8_t num,WStype_t type,uint8_t *payload,size_t len){
     }
 
 
-      
+    
+    if(msg.startsWith("MOTOR_POSITION|")){
+    String d = msg.substring(15);
+
+    int a = d.indexOf(',');
+    int b = d.indexOf(',', a+1);
+    int c = d.indexOf(',', b+1);
+
+    POSITION_M1 = d.substring(0,a).toInt();
+    POSITION_M2 = d.substring(a+1,b).toInt();
+    POSITION_M3 = d.substring(b+1,c).toInt();
+    POSITION_M4 = d.substring(c+1).toInt();
+
+    saveMotorPositionValue();
+
+    Serial.println("MOTOR POSITION SAVED ✔");
+    }
+
 
     if(msg.startsWith("PULSE_PWM|")){
-    String d = msg.substring(5);
+    String d = msg.substring(10);
 
     int a = d.indexOf(',');
     int b = d.indexOf(',', a+1);
@@ -1084,10 +1180,10 @@ void loop(){
   rxFail = (millis() - lastRX > 400);
 
   if(rxFail){
-    setMotor(0,0);
-    setMotor(1,0);
-    setMotor(2,0);
-    setMotor(3,0);
+    setMotor(POSITION_M1,0);
+    setMotor(POSITION_M2,0);
+    setMotor(POSITION_M3,0);
+    setMotor(POSITION_M4,0);
 
     roll = pitch = yaw = 0;
     gz_bias = 0;
@@ -1208,17 +1304,63 @@ float altHold = 0;
     pOut = constrain(pOut,-40,40);
     yOut = constrain(yOut,-25,25);
 
-    m1 = throttle + pOut + rOut - yOut + TrimM1;
-    m2 = throttle + pOut - rOut + yOut + TrimM2;
-    m3 = throttle - pOut - rOut - yOut + TrimM3;
-    m4 = throttle - pOut + rOut + yOut + TrimM4;
+    // m1 = throttle + pOut + rOut - yOut + TrimM1;
+    // m2 = throttle + pOut - rOut + yOut + TrimM2;
+    // m3 = throttle - pOut - rOut - yOut + TrimM3;
+    // m4 = throttle - pOut + rOut + yOut + TrimM4;
+
+
+    // m1 = throttle - pOut;
+    // m2 = throttle + pOut;
+    // m3 = throttle + pOut;
+    // m4 = throttle - pOut;
+
+    
+    // m1 = throttle - rOut;
+    // m2 = throttle - rOut;
+    // m3 = throttle + rOut;
+    // m4 = throttle + rOut;
+
+
+       
+    // m1 = throttle + yOut;
+    // m2 = throttle - yOut;
+    // m3 = throttle + yOut;
+    // m4 = throttle - yOut;
+
+     
+
+    // m1 = throttle - pOut - rOut + TrimM1;
+    // m2 = throttle + pOut - rOut  + TrimM2;
+    // m3 = throttle + pOut + rOut + TrimM3;
+    // m4 = throttle - pOut + rOut  + TrimM4;
+
+        m1 =  TrimM1;
+    m2 =  TrimM2;
+    m3 = TrimM3;
+    m4 =  TrimM4;
+
+
+    
+    // m1 = throttle - pOut - rOut + yOut;
+    // m2 = throttle + pOut - rOut  - yOut;
+    // m3 = throttle + pOut + rOut  + yOut;
+    // m4 = throttle - pOut + rOut  - yOut;
+
+    
+
+    // m1 = throttle - pOut - rOut ;
+    // m2 = throttle + pOut - rOut ;
+    // m3 = throttle + pOut + rOut ;
+    // m4 = throttle - pOut + rOut ;
+
 
   }
 
-  setMotor(0,m1);
-  setMotor(1,m2);
-  setMotor(2,m3);
-  setMotor(3,m4);
+  setMotor(POSITION_M1,m1);
+  setMotor(POSITION_M2,m2);
+  setMotor(POSITION_M3,m3);
+  setMotor(POSITION_M4,m4);
 
  String json="{";
 
@@ -1255,6 +1397,11 @@ json+="\"m1\":"+String(m1)+",";
 json+="\"m2\":"+String(m2)+",";
 json+="\"m3\":"+String(m3)+",";
 json+="\"m4\":"+String(m4)+",";
+
+json+="\"position_m1\":"+String(POSITION_M1)+",";
+json+="\"position_m2\":"+String(POSITION_M2)+",";
+json+="\"position_m3\":"+String(POSITION_M3)+",";
+json+="\"position_m4\":"+String(POSITION_M4)+",";
 
 json+="\"trim1\":"+String(TrimM1)+",";
 json+="\"trim2\":"+String(TrimM2)+",";

@@ -61,8 +61,8 @@ int M4_PIN=7;
 
 int TrimM1 = 0;
 int TrimM2 = 0;
-int TrimM3 = 0;
-int TrimM4 = 0;
+int TrimM3 = 5;
+int TrimM4 = 5;
 
 // ================= RX =================
 typedef struct {
@@ -278,8 +278,8 @@ void loadTrimValue(){
 
   TrimM1 = prefs.getInt("trim1", 0);
   TrimM2 = prefs.getInt("trim2", 0);
-  TrimM3 = prefs.getInt("trim3", 0);
-  TrimM4 = prefs.getInt("trim4", 0);
+  TrimM3 = prefs.getInt("trim3", 5);
+  TrimM4 = prefs.getInt("trim4", 5);
 
   prefs.end();
 }
@@ -428,6 +428,9 @@ h2{text-align:center;color:#00ffcc;}
   justify-content: space-evenly;
 }
 
+
+
+
 .bar{height:10px;background:#333;border-radius:5px;overflow:hidden;margin:4px 0;}
 .fill{height:100%;background:#00ffcc;transition:width .15s;}
 .motor .fill{background:#ff3b3b;}
@@ -437,6 +440,16 @@ h2{text-align:center;color:#00ffcc;}
   font-weight:bold;
   font-size:20px;
   margin:10px;
+}
+
+
+.card_drone{
+ height:280px;
+   width:280px;
+  margin-bottom:12px;
+  padding:10px;
+  background:#1f2937;
+  border-radius:8px;
 }
 
 // .warn{color:red;text-align:center;display:none;font-weight:bold;}
@@ -449,6 +462,9 @@ h2{text-align:center;color:#00ffcc;}
 <div id="warn" ></div>
 
 <div class="grid">
+
+
+
 
 <div class="card row">
 
@@ -486,7 +502,9 @@ CH3 <div class="bar"><div id="ch3" class="fill"></div></div>
 </div>
 
 
-<div class="card">
+<div class="card row">
+
+<div>
 <h2>PID CONTROL</h2>
 
 ROLL<br>
@@ -505,6 +523,14 @@ KI <input id="y_ki" type="number" step="0.001"><br>
 KD <input id="y_kd" type="number" step="0.001"><br><br>
 
 <button onclick="send()">SAVE PID</button>
+</div>
+
+
+<div>
+   <canvas id="c"></canvas>
+
+</div>
+
 
 </div>
 
@@ -518,6 +544,7 @@ M4 <div class="bar motor"><div id="m4" class="fill"></div></div>
 </div>
 
 <div>
+
 
 
 <div class="row">
@@ -642,9 +669,22 @@ try {
      alt.innerText=Number(d.alt || 0).toFixed(2);
     
 
+
     mac.innerText = d.mac || "-";
     rmac.innerText = d.rmac || "-";
 
+updateSim(d);
+
+simRoll  = simRoll * 0.8 + d.r * 0.2;
+simPitch = simPitch * 0.8 + d.p * 0.2;
+simYaw   = simYaw * 0.8 + d.y * 0.2;
+
+if(d.fail){
+  simRoll = simPitch = simYaw = 0;
+  vr = vp = vy = 0;
+}
+
+draw(simRoll, simPitch, simYaw, d);
 
 
      if(!window.init){
@@ -654,7 +694,7 @@ try {
     scl.value = d.scl;
     addr.value = d.addr;
 
-
+   
 
     r_kp.value=Number(d.r_kp || 0.00).toFixed(2);
     r_ki.value=Number(d.r_ki || 0.00).toFixed(2);
@@ -760,102 +800,236 @@ function reset_memmory(){
    ws.send("MEMMORY");
 }
 
-</script>
 
-</body>
-</html>
-)rawliteral";
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const box = canvas.parentElement;
 
+function resize(){
+  const ratio = window.devicePixelRatio || 1;
 
+  canvas.width = box.clientWidth * ratio;
+  canvas.height = box.clientHeight * ratio;
 
+  canvas.style.width = box.clientWidth + "px";
+  canvas.style.height = box.clientHeight + "px";
 
-
-
-//=================
-
-const char HTML1[] PROGMEM = R"rawliteral(
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>FC PRO FIXED</title>
-
-<style>
-body{margin:0;background:#0b0f1a;color:#fff;font-family:Arial;}
-h2{text-align:center;color:#00ffcc;}
-
-.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;padding:10px;}
-
-.card{background:#1c1f2a;padding:10px;border-radius:10px;}
-.row{
-  display:flex;
-  gap:20px;
-  flex-wrap:wrap;
-  align-items:flex-start;
+  ctx.setTransform(ratio,0,0,ratio,0,0);
 }
 
-// .row{display:flex;justify-content:center;gap:10px;flex-wrap:wrap}
+window.addEventListener('resize', resize);
+resize();
 
-.bar{height:10px;background:#333;border-radius:5px;overflow:hidden;margin:4px 0;}
-.fill{height:100%;background:#00ffcc;transition:width .15s;}
-.motor .fill{background:#ff3b3b;}
+function rad(d){return d*Math.PI/180;}
 
-#warn{
-  text-align:center;
-  font-weight:bold;
-  font-size:20px;
-  margin:10px;
+// ================= SIM =================
+let simRoll = 0;
+let simPitch = 0;
+let simYaw = 0;
+
+let vr = 0;
+let vp = 0;
+let vy = 0;
+
+// ================= MOTOR MAP (IMPORTANT) =================
+// layout của bạn:
+// M1   M2
+// M4   M3
+//
+// tọa độ vật lý:
+// M1 (-,+) front-left
+// M2 (+,+) front-right
+// M4 (-,-) back-left
+// M3 (+,-) back-right
+
+function updateSim(d){
+
+  let m1 = d.m1 || 0;
+  let m2 = d.m2 || 0;
+  let m3 = d.m3 || 0;
+  let m4 = d.m4 || 0;
+
+  m1 /= 255;
+  m2 /= 255;
+  m3 /= 255;
+  m4 /= 255;
+
+  // ===== FIXED PHYSICS =====
+
+  // Roll: trái vs phải
+  let rollForce =
+    (m2 + m3) - (m1 + m4);
+
+  // Pitch: trước vs sau
+  let pitchForce =
+    (m1 + m2) - (m3 + m4);
+
+  // Yaw: CW/CCW (giữ như bạn đang dùng)
+  let yawForce =
+    (m1 + m3) - (m2 + m4);
+
+  // ===== INERTIA =====
+  vr += rollForce * 0.7;
+  vp += pitchForce * 0.7;
+  vy += yawForce * 0.4;
+
+  // ===== INTEGRATION =====
+  simRoll  += vr;
+  simPitch += vp;
+  simYaw   += vy;
+
+  // ===== DAMPING =====
+  vr *= 0.90;
+  vp *= 0.90;
+  vy *= 0.92;
+
+  simRoll *= 0.98;
+  simPitch *= 0.98;
+  simYaw *= 0.98;
+
+  // clamp
+  simRoll  = Math.max(-80, Math.min(80, simRoll));
+  simPitch = Math.max(-80, Math.min(80, simPitch));
 }
 
-// .warn{color:red;text-align:center;display:none;font-weight:bold;}
-</style>
-</head>
+// ================= 3D =================
+function rotate3D(x,y,z,rx,ry,rz){
 
-<body>
+  let cz=Math.cos(rz), sz=Math.sin(rz);
+  [x,y] = [x*cz - y*sz, x*sz + y*cz];
 
-<h2>🚁 FC DRONE RESET</h2>
-<div id="warn" ></div>
+  let cy=Math.cos(ry), sy=Math.sin(ry);
+  [x,z] = [x*cy + z*sy, -x*sy + z*cy];
 
-<div class="grid">
+  let cx=Math.cos(rx), sx=Math.sin(rx);
+  [y,z] = [y*cx - z*sx, y*sx + z*cx];
 
-<div class="card">
+  return [x,y,z];
+}
 
- <button onclick="reset_memmory()">Reset Memmory</button>
+function project(x,y,z){
+  const f = 300;
+  const scale = f/(f+z);
+  return [x*scale, y*scale];
+}
 
-</div>
+// ===== DRONE SHAPE (FIXED LAYOUT) =====
+const points = [
+  [-180,  180, 0], // M1 front-left
+  [ 180,  180, 0], // M2 front-right
+  [ 180, -180, 0], // M3 back-right
+  [-180, -180, 0]  // M4 back-left
+];
 
-</div>
+// ================= DRAW =================
+function draw(roll,pitch,yaw,d){
 
-<script>
+  ctx.clearRect(0,0,box.clientWidth,box.clientHeight);
 
+  const cx = box.clientWidth/2;
+  const cy = box.clientHeight/2;
 
-let ws=new WebSocket("ws://"+location.hostname+":81/");
+  // grid
+  ctx.strokeStyle="#0f2a3a";
+  ctx.lineWidth=1;
 
-ws.onmessage=(e)=>{
+  for(let i=-300;i<=300;i+=30){
+    ctx.beginPath();
+    ctx.moveTo(cx+i,0);
+    ctx.lineTo(cx+i,box.clientHeight);
+    ctx.stroke();
 
-try {
-    let d = JSON.parse(e.data);
-
-    
-    console.log("dddddd:", d);
-    
-
-  } catch (err) {
-    console.log("WS error:", err);
+    ctx.beginPath();
+    ctx.moveTo(0,cy+i);
+    ctx.lineTo(box.clientWidth,cy+i);
+    ctx.stroke();
   }
-};
 
+  const rx = rad(-roll);   // FIX axis
+  const ry = rad(pitch);
+  const rz = rad(-yaw);
 
-function reset_memmory(){
-   ws.send("MEMMORY");
+  let p2d=[];
+
+  for(let p of points){
+    let [x,y,z] = rotate3D(p[0],p[1],p[2],rx,ry,rz);
+    let pr = project(x,y,z+200);
+    p2d.push([cx+pr[0], cy+pr[1]]);
+  }
+
+  // shadow
+  ctx.fillStyle="rgba(0,0,0,0.3)";
+  ctx.beginPath();
+  ctx.ellipse(cx,cy+90,120,35,0,0,Math.PI*2);
+  ctx.fill();
+
+  // arms
+  ctx.strokeStyle="#00ffaa";
+  ctx.lineWidth=5;
+
+  function line(a,b){
+    ctx.beginPath();
+    ctx.moveTo(p2d[a][0],p2d[a][1]);
+    ctx.lineTo(p2d[b][0],p2d[b][1]);
+    ctx.stroke();
+  }
+
+  line(0,1);
+  line(1,2);
+  line(2,3);
+  line(3,0);
+
+  // motors
+  const labels=["M1","M2","M3","M4"];
+
+  for(let i=0;i<4;i++){
+
+    ctx.beginPath();
+    ctx.arc(p2d[i][0],p2d[i][1],14,0,Math.PI*2);
+    ctx.strokeStyle="#fff";
+    ctx.stroke();
+
+    ctx.fillStyle="#fff";
+    ctx.font="12px Arial";
+    ctx.fillText(labels[i],p2d[i][0]+10,p2d[i][1]-10);
+  }
+
+  // propeller effect
+  for(let i=0;i<4;i++){
+
+    let speed = d ? [d.m1,d.m2,d.m3,d.m4][i] / 255 : 0;
+
+    ctx.beginPath();
+    ctx.arc(p2d[i][0], p2d[i][1], 20 + speed*20, 0, Math.PI*2);
+
+    ctx.strokeStyle = "rgba(0,255,200,"+(0.3+speed)+")";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
+  // body
+  ctx.fillStyle="#00ffaa";
+  ctx.beginPath();
+  ctx.arc(cx,cy,18,0,Math.PI*2);
+  ctx.fill();
+
+  // debug
+  ctx.fillStyle="#fff";
+  ctx.fillText("R:"+roll.toFixed(1),10,20);
+  ctx.fillText("P:"+pitch.toFixed(1),10,40);
+  ctx.fillText("Y:"+yaw.toFixed(1),10,60);
 }
-
 </script>
 
 </body>
 </html>
 )rawliteral";
+
+
+
+
+
+
 
 // ================= WEB =================
 // void handleRoot(){
@@ -1061,9 +1235,7 @@ Adafruit_BMP280::FILTER_X16,
     server.send_P(200,"text/html",HTML);
   });
 
-    server.on("/reset_saving",[](void){
-    server.send_P(200,"text/html",HTML1);
-  });
+
   server.begin();
 
   ws.begin();
@@ -1212,6 +1384,9 @@ float altHold = 0;
     m2 = throttle + pOut - rOut + yOut + TrimM2;
     m3 = throttle - pOut - rOut - yOut + TrimM3;
     m4 = throttle - pOut + rOut + yOut + TrimM4;
+
+    
+    
 
   }
 

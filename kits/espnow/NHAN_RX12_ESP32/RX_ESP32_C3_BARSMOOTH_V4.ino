@@ -35,8 +35,8 @@ bool altReady = false;
 // ================= PULSE AND PWWM =================
 int PULSE_MIN = 1000;
 int PULSE_MAX = 2000;
-int PWM_MIN = 90;
-int PWM_MAX = 180;
+int PWM_MIN = 5;
+int PWM_MAX = 20;
 
 
 // ================= PIN =================
@@ -909,7 +909,8 @@ void onWs(uint8_t num,WStype_t type,uint8_t *payload,size_t len){
 
       savePin();
       motorInit();   // 🔥 rebind PWM
-      return;
+      // return;
+       ESP.restart();   // 🔥 bắt buộc
     }
 
 
@@ -979,7 +980,7 @@ void onWs(uint8_t num,WStype_t type,uint8_t *payload,size_t len){
       
 
     if(msg.startsWith("PULSE_PWM|")){
-    String d = msg.substring(5);
+    String d = msg.substring(10);
 
     int a = d.indexOf(',');
     int b = d.indexOf(',', a+1);
@@ -1208,10 +1209,42 @@ float altHold = 0;
     pOut = constrain(pOut,-40,40);
     yOut = constrain(yOut,-25,25);
 
-    m1 = throttle + pOut + rOut - yOut + TrimM1;
-    m2 = throttle + pOut - rOut + yOut + TrimM2;
-    m3 = throttle - pOut - rOut - yOut + TrimM3;
-    m4 = throttle - pOut + rOut + yOut + TrimM4;
+    // m1 = throttle + pOut + rOut - yOut + TrimM1;
+    // m2 = throttle + pOut - rOut + yOut + TrimM2;
+    // m3 = throttle - pOut - rOut - yOut + TrimM3;
+    // m4 = throttle - pOut + rOut + yOut + TrimM4;
+
+
+    // m1 = throttle - pOut;
+    // m2 = throttle + pOut;
+    // m3 = throttle + pOut;
+    // m4 = throttle - pOut;
+
+    
+    // m1 = throttle - rOut;
+    // m2 = throttle - rOut;
+    // m3 = throttle + rOut;
+    // m4 = throttle + rOut;
+
+
+       
+    // m1 = throttle + yOut;
+    // m2 = throttle - yOut;
+    // m3 = throttle + yOut;
+    // m4 = throttle - yOut;
+
+     
+
+    
+    m1 = throttle - pOut - rOut + yOut;
+    m2 = throttle + pOut - rOut  - yOut;
+    m3 = throttle + pOut + rOut  + yOut;
+    m4 = throttle - pOut + rOut  - yOut;
+
+    
+
+
+
 
   }
 

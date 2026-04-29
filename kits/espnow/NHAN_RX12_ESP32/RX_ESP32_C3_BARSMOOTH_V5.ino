@@ -59,6 +59,16 @@ int M3_PIN=6;
 int M4_PIN=7;
 
 
+
+
+// ================= MOTOR POSITION =================
+int POSITION_M1 = 0;
+int POSITION_M2 = 1;
+int POSITION_M3 = 2;
+int POSITION_M4 = 3;
+
+
+
 int TrimM1 = 0;
 int TrimM2 = 0;
 int TrimM3 = 0;
@@ -220,18 +230,35 @@ void updateAltitude(){
 }
 
 // ================= PID =================
+// float compute(PID &p, float set, float in, float dt){
+//   float e = set - in;
+
+//   p.i += e * dt;
+//   p.i = constrain(p.i, -30, 30);
+
+//   float d = (e - p.last) / dt;
+//   p.last = e;
+
+//   return p.kp*e + p.ki*p.i + p.kd*d;
+
+  
+// }
+
+
 float compute(PID &p, float set, float in, float dt){
   float e = set - in;
 
   p.i += e * dt;
   p.i = constrain(p.i, -30, 30);
 
-  float d = (e - p.last) / dt;
+  float d_raw = (e - p.last) / dt;
+
+  // 🔥 LOW PASS cho D
+  float d = 0.7 * p.last + 0.3 * d_raw;
+
   p.last = e;
 
   return p.kp*e + p.ki*p.i + p.kd*d;
-
-  
 }
 
 
@@ -255,6 +282,32 @@ void loadPulsePwmValue(){
   PULSE_MAX = prefs.getInt("pulse_max", 2000);
   PWM_MIN = prefs.getInt("pwm_min", 90);
   PWM_MAX = prefs.getInt("pwm_max", 180);
+
+  prefs.end();
+}
+
+
+
+// ================= SAVE MOTOR POSITION VALUE =================
+void saveMotorPositionValue(){
+  prefs.begin("motor_position", false);
+
+  prefs.putInt("position_m1", POSITION_M1);
+  prefs.putInt("position_m2", POSITION_M2);
+  prefs.putInt("position_m3", POSITION_M3);
+  prefs.putInt("position_m4", POSITION_M4);
+
+  prefs.end();
+}
+
+// ================= LOAD  MOTOR POSITION VALUE =================
+void loadMotorPositionValue(){
+  prefs.begin("motor_position", true);
+
+  POSITION_M1 = prefs.getInt("position_m1", 0);
+  POSITION_M2 = prefs.getInt("position_m2", 1);
+  POSITION_M3 = prefs.getInt("position_m3", 2);
+  POSITION_M4 = prefs.getInt("position_m4", 3);
 
   prefs.end();
 }
@@ -378,31 +431,14 @@ void loadPID(){
 
 
 
-void clearAll()
-{
-  prefs.begin("i2c", false);
-  prefs.clear();
-  prefs.end();
+void clearAll(){
+  const char* keys[] = {"pid","i2c","pin","pulse_pwm","trim","motor_position"};
 
-  prefs.begin("pid", false);
-  prefs.clear();
-  prefs.end();
-
-  prefs.begin("pin", false);
-  prefs.clear();
-  prefs.end();
-
-    prefs.begin("pulse_pwm", false);
-  prefs.clear();
-  prefs.end();
-
-
-    prefs.begin("trim", false);
-  prefs.clear();
-  prefs.end();
-
-
-  Serial.println("I2C + PID CLEARED ✔");
+  for(auto k: keys){
+    prefs.begin(k, false);
+    prefs.clear();
+    prefs.end();
+  }
 }
 
 // ================= HTML =================
@@ -478,11 +514,29 @@ h2{text-align:center;color:#00ffcc;}
 
 
 <div class="card">
+<div>
 <h3>TX</h3>
 CH0 <div class="bar"><div id="ch0" class="fill"></div></div>
 CH1 <div class="bar"><div id="ch1" class="fill"></div></div>
 CH2 <div class="bar"><div id="ch2" class="fill"></div></div>
 CH3 <div class="bar"><div id="ch3" class="fill"></div></div>
+
+</div>
+
+<div class="row">
+
+   <div class="card">
+    <h3>PULSE AND PWM</h3>
+    PULSE MIN <input id="pulse_min"><br>
+    PULSE MAX <input id="pulse_max"><br>
+    PWM MIN <input id="pwm_min"><br>
+    PWM MAX <input id="pwm_max"><br>
+      <button onclick="savePusle_Pwm()">APPLY</button>
+  </div>
+
+</div>
+
+
 </div>
 
 
@@ -540,14 +594,17 @@ M4 <div class="bar motor"><div id="m4" class="fill"></div></div>
       <button onclick="saveTrim()">APPLY</button>
   </div>
 
-   <div class="card">
-    <h3>PULSE AND PWM</h3>
-    PULSE MIN <input id="pulse_min"><br>
-    PULSE MAX <input id="pulse_max"><br>
-    PWM MIN <input id="pwm_min"><br>
-    PWM MAX <input id="pwm_max"><br>
-      <button onclick="savePusle_Pwm()">APPLY</button>
-  </div>
+
+    <div class="card">
+    <h3>MOTOR POSITION</h3>
+    POSITION M1 <input id="position_m1"><br>
+   POSITION M2 <input id="position_m2"><br>
+    POSITION M3 <input id="position_m3"><br>
+   POSITION M4 <input id="position_m4"><br>
+    <button onclick="saveMotorPosition()">APPLY</button>
+   </div>
+
+
 
 </div>
 
@@ -597,13 +654,20 @@ const pm2 = document.getElementById("pm2");
 const pm3 = document.getElementById("pm3");
 const pm4 = document.getElementById("pm4");
 
+
+const position_m1 = document.getElementById("position_m1");
+const position_m2 = document.getElementById("position_m2");
+const position_m3 = document.getElementById("position_m3");
+const position_m4 = document.getElementById("position_m4");
+
+
 const trim1 = document.getElementById("trim1");
 const trim2 = document.getElementById("trim2");
 const trim3 = document.getElementById("trim3");
 const trim4 = document.getElementById("trim4");
 
-const pusle_min = document.getElementById("pusle_min");
-const pusle_max = document.getElementById("pusle_max");
+const pulse_min = document.getElementById("pulse_min");
+const pulse_max = document.getElementById("pulse_max");
 const pwm_min = document.getElementById("pwm_min");
 const pwm_max = document.getElementById("pwm_max");
 
@@ -675,6 +739,11 @@ try {
     pm3.value=d.pm3;
     pm4.value=d.pm4;
 
+    position_m1.value=d.position_m1;
+    position_m2.value=d.position_m2;
+    position_m3.value=d.position_m3;
+    position_m4.value=d.position_m4;
+
     trim1.value =d.trim1;
     trim2.value = d.trim2;
     trim3.value =d.trim3;
@@ -743,6 +812,13 @@ function send(){
 function savePusle_Pwm(){
   ws.send("PULSE_PWM|"+pulse_min.value+","+pulse_max.value+","+pwm_min.value+","+pwm_max.value);
 }
+
+
+// ===== SEND MOTOR POSOTION =====
+function saveMotorPosition(){
+  ws.send("MOTOR_POSITION|"+position_m1.value+","+position_m2.value+","+position_m3.value+","+position_m4.value);
+}
+
 
 // ===== SEND PIN =====
 function saveTrim(){
@@ -869,6 +945,8 @@ void onWs(uint8_t num,WStype_t type,uint8_t *payload,size_t len){
 
     String msg=(char*)payload;
 
+
+
     if(msg.startsWith("PID|")){
 
       String d=msg.substring(4);
@@ -910,6 +988,25 @@ void onWs(uint8_t num,WStype_t type,uint8_t *payload,size_t len){
       savePin();
       motorInit();   // 🔥 rebind PWM
       return;
+    }
+
+
+     
+    if(msg.startsWith("MOTOR_POSITION|")){
+    String d = msg.substring(15);
+
+    int a = d.indexOf(',');
+    int b = d.indexOf(',', a+1);
+    int c = d.indexOf(',', b+1);
+
+    POSITION_M1 = d.substring(0,a).toInt();
+    POSITION_M2 = d.substring(a+1,b).toInt();
+    POSITION_M3 = d.substring(b+1,c).toInt();
+    POSITION_M4 = d.substring(c+1).toInt();
+
+    saveMotorPositionValue();
+
+    Serial.println("MOTOR POSITION SAVED ✔");
     }
 
 
@@ -979,7 +1076,7 @@ void onWs(uint8_t num,WStype_t type,uint8_t *payload,size_t len){
       
 
     if(msg.startsWith("PULSE_PWM|")){
-    String d = msg.substring(5);
+    String d = msg.substring(10);
 
     int a = d.indexOf(',');
     int b = d.indexOf(',', a+1);
@@ -990,7 +1087,7 @@ void onWs(uint8_t num,WStype_t type,uint8_t *payload,size_t len){
     PWM_MIN = d.substring(b+1,c).toInt();
     PWM_MAX = d.substring(c+1).toInt();
 
-    saveTrimValue();
+  savePulsePwmValue();
 
     Serial.println("PULSW AND PWM SAVED ✔");
     }
@@ -1010,7 +1107,7 @@ void setup(){
   loadI2C();
   // Wire.setPins(SDA_PIN, SCL_PIN);
 
-    Wire.setPins(8, 9);
+    Wire.setPins(SDA_PIN, SCL_PIN);
   Wire.begin();
   Wire.setClock(400000);
 
@@ -1038,12 +1135,23 @@ Adafruit_BMP280::FILTER_X16,
 
 
 
+  // 🔥 LOAD FULL CONFIG
+  loadPulsePwmValue();        // ✅ FIX
+  loadMotorPositionValue();   // ✅ FIX
   loadTrimValue();
   loadPin();
+  loadPID();
 
   motorInit();
-  loadPID();
   calibrate();
+
+
+  // loadTrimValue();
+  // loadPin();
+
+  // motorInit();
+  // loadPID();
+  // calibrate();
 
   
 
@@ -1084,15 +1192,19 @@ void loop(){
   rxFail = (millis() - lastRX > 400);
 
   if(rxFail){
-    setMotor(0,0);
-    setMotor(1,0);
-    setMotor(2,0);
-    setMotor(3,0);
+    setMotor(POSITION_M1,0);
+    setMotor(POSITION_M2,0);
+    setMotor(POSITION_M3,0);
+    setMotor(POSITION_M4,0);
 
     roll = pitch = yaw = 0;
     gz_bias = 0;
 
     pidR.i = pidP.i = pidY.i = 0;
+
+
+      String json = "{\"fail\":1}";
+  ws.broadcastTXT(json);  // ✅ gửi vẫn hoạt động
 
     prevFail = true;
     return;
@@ -1208,17 +1320,22 @@ float altHold = 0;
     pOut = constrain(pOut,-40,40);
     yOut = constrain(yOut,-25,25);
 
-    m1 = throttle + pOut + rOut - yOut + TrimM1;
-    m2 = throttle + pOut - rOut + yOut + TrimM2;
-    m3 = throttle - pOut - rOut - yOut + TrimM3;
-    m4 = throttle - pOut + rOut + yOut + TrimM4;
+    // m1 = throttle - pOut + rOut - yOut + TrimM1;
+    // m2 = throttle - pOut - rOut + yOut + TrimM2;
+    // m3 = throttle + pOut - rOut - yOut + TrimM3;
+    // m4 = throttle + pOut + rOut + yOut + TrimM4;
+
+     m1 = throttle - pOut + rOut + TrimM1;
+    m2 = throttle - pOut - rOut  + TrimM2;
+    m3 = throttle + pOut - rOut  + TrimM3;
+    m4 = throttle + pOut + rOut  + TrimM4;
 
   }
 
-  setMotor(0,m1);
-  setMotor(1,m2);
-  setMotor(2,m3);
-  setMotor(3,m4);
+  setMotor(POSITION_M1,m1);
+  setMotor(POSITION_M2,m2);
+  setMotor(POSITION_M3,m3);
+  setMotor(POSITION_M4,m4);
 
  String json="{";
 
@@ -1255,6 +1372,12 @@ json+="\"m1\":"+String(m1)+",";
 json+="\"m2\":"+String(m2)+",";
 json+="\"m3\":"+String(m3)+",";
 json+="\"m4\":"+String(m4)+",";
+
+
+json+="\"position_m1\":"+String(POSITION_M1)+",";
+json+="\"position_m2\":"+String(POSITION_M2)+",";
+json+="\"position_m3\":"+String(POSITION_M3)+",";
+json+="\"position_m4\":"+String(POSITION_M4)+",";
 
 json+="\"trim1\":"+String(TrimM1)+",";
 json+="\"trim2\":"+String(TrimM2)+",";
