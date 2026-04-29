@@ -1325,6 +1325,8 @@ float altHold = 0;
     // m3 = throttle + pOut - rOut - yOut + TrimM3;
     // m4 = throttle + pOut + rOut + yOut + TrimM4;
 
+
+
      m1 = throttle - pOut + rOut + TrimM1;
     m2 = throttle - pOut - rOut  + TrimM2;
     m3 = throttle + pOut - rOut  + TrimM3;
