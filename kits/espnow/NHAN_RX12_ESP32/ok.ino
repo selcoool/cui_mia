@@ -97,6 +97,7 @@ float roll0 = 0, pitch0 = 0;
 float gx_o = 0, gy_o = 0, gz_o = 0;
 float gz_bias = 0;
 float gz_f = 0;
+float yawHold = 0;
 
 // ================= PID =================
 struct PID {
@@ -1260,6 +1261,7 @@ void loop(){
     roll = pitch = yaw = 0;
     gz_bias = 0;
     gz_f = 0;
+    yawHold = yaw;
 
     pidR.i = pidP.i = pidY.i = 0;
     pidR.last = pidP.last = pidY.last = 0;
@@ -1372,9 +1374,18 @@ if(throttle < lastThrottle){
 
 lastThrottle = throttle;
 
-  float rollSet  = (rx.ch[3] - 1500) / 100.0;
-  float pitchSet = (rx.ch[2] - 1500) / 100.0;
-  float yawSet   = (rx.ch[1] - 1500) / 100.0;
+  float rollSet  = (rx.ch[3] - 1500) / 70.0;
+  float pitchSet = (rx.ch[2] - 1500) / 70.0;
+  // float yawSet   = (rx.ch[1] - 1500) / 70.0;
+  float yawInput = (rx.ch[1] - 1500) / 70.0;
+
+// deadzone
+float yawSet = 0;
+
+if (fabs(yawInput) > 1.0) {
+  yawSet = yawInput;
+  yawHold = yaw;   // cập nhật khi user xoay
+}
 
   float m1=0,m2=0,m3=0,m4=0;
 
@@ -1402,16 +1413,36 @@ lastThrottle = throttle;
 
     float rOut = compute(pidR, rollSet, roll, dt);
     float pOut = compute(pidP, pitchSet, pitch, dt);
-    float yOut = compute(pidY, yawSet, yaw, dt);
+    // float yOut = compute(pidY, yawSet, yaw, dt);
+    // float yawError = (yawSet == 0) ? (yawHold - yaw) : yawSet;
+    float yawError;
+
+      if (fabs(yawInput) > 1.0) {
+        yawSet = yawInput;
+        yawHold = yaw;   // update khi user điều khiển
+        yawError = yawSet - yaw;
+      } else {
+        yawError = yawHold - yaw; // giữ hướng
+      }
+
+  float yOut = compute(pidY, yawSet, yaw, dt);
 
     rOut = constrain(rOut,-40,40);
     pOut = constrain(pOut,-40,40);
     yOut = constrain(yOut,-40,40);
 
-    m1 = throttle - pOut + rOut - yOut + TrimM1;
-    m2 = throttle - pOut - rOut + yOut + TrimM2;
-    m3 = throttle + pOut - rOut - yOut + TrimM3;
-    m4 = throttle + pOut + rOut + yOut + TrimM4;
+    // m1 = throttle - pOut + rOut - yOut + TrimM1;
+    // m2 = throttle - pOut - rOut + yOut + TrimM2;
+    // m3 = throttle + pOut - rOut - yOut + TrimM3;
+    // m4 = throttle + pOut + rOut + yOut + TrimM4;
+
+
+    float yawGain = 1.3;
+
+m1 = throttle - pOut + rOut - yOut * yawGain + TrimM1;
+m2 = throttle - pOut - rOut + yOut * yawGain + TrimM2;
+m3 = throttle + pOut - rOut - yOut * yawGain + TrimM3;
+m4 = throttle + pOut + rOut + yOut * yawGain + TrimM4;
 
 
 
