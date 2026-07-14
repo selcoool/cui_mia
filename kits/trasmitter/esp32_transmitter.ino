@@ -308,7 +308,7 @@ void loop()
 tx.ch[1] = joystickToRC(analogRead(JOY1_X), centerJ1X);
 
 // Pitch đảo chiều
-tx.ch[2] = 3000 - joystickToRC(analogRead(JOY2_Y), centerJ2Y);
+tx.ch[2] = joystickToRC(analogRead(JOY2_Y), centerJ2Y);
 
 tx.ch[3] = joystickToRC(analogRead(JOY1_Y), centerJ1Y);
 
