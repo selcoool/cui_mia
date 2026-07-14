@@ -35,12 +35,12 @@ bool parseMAC(String macStr, uint8_t *mac){
 // ======================
 // JOYSTICK PINS
 // ======================
-#define JOY1_X 32
-#define JOY1_Y 33
+#define JOY1_X 35
+#define JOY1_Y 32
 #define JOY1_B 27
 
-#define JOY2_X 35
-#define JOY2_Y 34
+#define JOY2_X 34
+#define JOY2_Y 33
 #define JOY2_B 25
 
 
@@ -245,11 +245,11 @@ void setup()
     centerJ2X = analogRead(JOY2_X);
     centerJ2Y = analogRead(JOY2_Y);
 
-    Serial.println("CENTER");
-    Serial.print("J1X = "); Serial.println(centerJ1X);
-    Serial.print("J1Y = "); Serial.println(centerJ1Y);
-    Serial.print("J2X = "); Serial.println(centerJ2X);
-    Serial.print("J2Y = "); Serial.println(centerJ2Y);
+    // Serial.println("CENTER");
+    // Serial.print("J1X = "); Serial.println(centerJ1X);
+    // Serial.print("J1Y = "); Serial.println(centerJ1Y);
+    // Serial.print("J2X = "); Serial.println(centerJ2X);
+    // Serial.print("J2Y = "); Serial.println(centerJ2Y);
 
     // ESP-NOW
     // WiFi.mode(WIFI_STA);
@@ -291,26 +291,43 @@ void loop()
    server.handleClient();
   webSocket.loop();
 
+    //  centerJ1X = analogRead(JOY1_X);
+    // centerJ1Y = analogRead(JOY1_Y);
+    // centerJ2X = analogRead(JOY2_X);
+    // centerJ2Y = analogRead(JOY2_Y);
+     
+    // Serial.println("CENTER");
+    // Serial.print("J1X = "); Serial.println(centerJ1X);
+    // Serial.print("J1Y = "); Serial.println(centerJ1Y);
+    // Serial.print("J2X = "); Serial.println(centerJ2X);
+    // Serial.print("J2Y = "); Serial.println(centerJ2Y);
 
-//    tx.ch[0] = joystickToRC(analogRead(JOY1_Y), centerJ1Y);
+#define JOY1_X 35
+#define JOY1_Y 32
+#define JOY1_B 27
 
-// tx.ch[1] = 3000 - joystickToRC(analogRead(JOY2_Y), centerJ2Y);
+#define JOY2_X 34
+#define JOY2_Y 33
+#define JOY2_B 25
+   tx.ch[0] = joystickToRC(analogRead(JOY1_X), centerJ1X);
 
-// // Pitch đảo chiều
-// tx.ch[2] = joystickToRC(analogRead(JOY1_X), centerJ1X);
-
-// tx.ch[3] = joystickToRC(analogRead(JOY2_X), centerJ2X);
-
-
-
-   tx.ch[0] = joystickToRC(analogRead(JOY2_X), centerJ2X);
-
-tx.ch[1] = joystickToRC(analogRead(JOY1_X), centerJ1X);
+tx.ch[1] = 3000 - joystickToRC(analogRead(JOY1_Y), centerJ1Y);
 
 // Pitch đảo chiều
-tx.ch[2] = joystickToRC(analogRead(JOY2_Y), centerJ2Y);
+tx.ch[2] = joystickToRC(analogRead(JOY2_X), centerJ2X);
 
-tx.ch[3] = joystickToRC(analogRead(JOY1_Y), centerJ1Y);
+tx.ch[3] = joystickToRC(analogRead(JOY2_Y), centerJ2Y);
+
+
+
+//    tx.ch[0] = joystickToRC(analogRead(JOY2_X), centerJ2X);
+
+// tx.ch[1] = joystickToRC(analogRead(JOY1_X), centerJ1X);
+
+// // Pitch đảo chiều
+// tx.ch[2] = joystickToRC(analogRead(JOY2_Y), centerJ2Y);
+
+// tx.ch[3] = joystickToRC(analogRead(JOY1_Y), centerJ1Y);
 
 tx.ch[4] = 1500;
 tx.ch[5] = 1500;
@@ -343,9 +360,9 @@ esp_now_send(receiverMAC, (uint8_t *)&tx, sizeof(tx));
 // Serial debug
 
 
-    Serial.print("📤 Channels: ");
-    for(int i=0;i<8;i++){ Serial.print("CH"); Serial.print(i+1); Serial.print(":"); Serial.print(tx.ch[i]); Serial.print(" "); }
-    Serial.println();
+    // Serial.print("📤 Channels: ");
+    // for(int i=0;i<8;i++){ Serial.print("CH"); Serial.print(i+1); Serial.print(":"); Serial.print(tx.ch[i]); Serial.print(" "); }
+    // Serial.println();
 
 delay(20);
 }
