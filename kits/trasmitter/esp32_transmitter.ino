@@ -13,6 +13,8 @@ WebSocketsServer webSocket(81);
 Preferences prefs;
 
 
+uint32_t LoopTimer;
+
 // ===== Helpers =====
 String macToStr(uint8_t *mac){
   char buf[18];
@@ -278,7 +280,7 @@ void setup()
 
     Serial.println("TX READY");
 
-
+  LoopTimer=micros();
     
 }
 
@@ -302,16 +304,19 @@ void loop()
     // Serial.print("J2X = "); Serial.println(centerJ2X);
     // Serial.print("J2Y = "); Serial.println(centerJ2Y);
 
-#define JOY1_X 35
-#define JOY1_Y 32
-#define JOY1_B 27
+// #define JOY1_X 35
+// #define JOY1_Y 32
+// #define JOY1_B 27
 
-#define JOY2_X 34
-#define JOY2_Y 33
-#define JOY2_B 25
-   tx.ch[0] = joystickToRC(analogRead(JOY1_X), centerJ1X);
+// #define JOY2_X 34
+// #define JOY2_Y 33
+// #define JOY2_B 25
 
-tx.ch[1] = 3000 - joystickToRC(analogRead(JOY1_Y), centerJ1Y);
+
+int adc = analogRead(JOY1_X);
+tx.ch[0] = map(adc, 0, 4095, 1000, 2000);
+
+tx.ch[1] = joystickToRC(analogRead(JOY1_Y), centerJ1Y);
 
 // Pitch đảo chiều
 tx.ch[2] = joystickToRC(analogRead(JOY2_X), centerJ2X);
@@ -364,7 +369,10 @@ esp_now_send(receiverMAC, (uint8_t *)&tx, sizeof(tx));
     // for(int i=0;i<8;i++){ Serial.print("CH"); Serial.print(i+1); Serial.print(":"); Serial.print(tx.ch[i]); Serial.print(" "); }
     // Serial.println();
 
-delay(20);
+// delay(20);
+
+     while (micros() - LoopTimer < 4000);
+        LoopTimer=micros();
 }
 
 
