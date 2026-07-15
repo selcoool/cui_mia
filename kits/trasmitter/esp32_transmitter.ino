@@ -12,6 +12,7 @@ WebServer server(80);
 WebSocketsServer webSocket(81);
 Preferences prefs;
 
+volatile bool canSend = true;
 
 uint32_t LoopTimer;
 
@@ -65,6 +66,8 @@ Data tx;
 
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status)
 {
+
+  canSend = true;
     // Serial.print("Send: ");
     // Serial.println(status == ESP_NOW_SEND_SUCCESS ? "OK" : "FAIL");
 }
@@ -221,7 +224,12 @@ void setup()
 
     WiFi.mode(WIFI_AP_STA);
     WiFi.softAP(ssid.c_str(), password.c_str());
-    Serial.print("AP IP: "); Serial.println(WiFi.softAPIP());
+    WiFi.disconnect();
+    Serial.print("AP IP: "); 
+    
+    Serial.println(WiFi.softAPIP());
+
+    
 
      // WebServer
     server.on("/", handleRoot);
@@ -232,7 +240,11 @@ void setup()
     // WebSocket
     webSocket.begin();
     webSocket.onEvent([](uint8_t num, WStype_t type, uint8_t * payload, size_t length){
-      if(type==WStype_TEXT) Serial.printf("WS msg from %u: %s\n", num, payload);
+
+      if(type==WStype_TEXT) 
+      
+      Serial.printf("WS msg from %u: %s\n", num, payload);
+
     });
 
     pinMode(JOY1_B, INPUT_PULLUP);
@@ -290,8 +302,8 @@ void loop()
 {
 
 
-   server.handleClient();
-  webSocket.loop();
+  //  server.handleClient();
+  // webSocket.loop();
 
     //  centerJ1X = analogRead(JOY1_X);
     // centerJ1Y = analogRead(JOY1_Y);
@@ -339,37 +351,61 @@ tx.ch[5] = 1500;
 tx.ch[6] = 1500;
 tx.ch[7] = 1500;
 
-  Serial.printf(
-    "CH0:%4d CH1:%4d CH2:%4d CH3:%4d CH4:%4d CH5:%4d CH6:%4d CH7:%4d\n",
-    tx.ch[0],
-    tx.ch[1],
-    tx.ch[2],
-    tx.ch[3],
-    tx.ch[4],
-    tx.ch[5],
-    tx.ch[6],
-    tx.ch[7]
-);
+//   Serial.printf(
+//     "CH0:%4d CH1:%4d CH2:%4d CH3:%4d CH4:%4d CH5:%4d CH6:%4d CH7:%4d\n",
+//     tx.ch[0],
+//     tx.ch[1],
+//     tx.ch[2],
+//     tx.ch[3],
+//     tx.ch[4],
+//     tx.ch[5],
+//     tx.ch[6],
+//     tx.ch[7]
+// );
 
-esp_now_send(receiverMAC, (uint8_t *)&tx, sizeof(tx));
+// esp_now_send(receiverMAC, (uint8_t *)&tx, sizeof(tx));
+
+if (canSend)
+{
+    canSend = false;
+    esp_now_send(receiverMAC,
+                 (uint8_t *)&tx,
+                 sizeof(tx));
+}
 
 
- // Broadcast PPM to WS clients
+//  // Broadcast PPM to WS clients
+//     String chJson = "[";
+//     for(int i=0;i<8;i++){
+//       chJson += String(tx.ch[i]);
+//       if(i<8-1) chJson += ",";
+//     }
+//     chJson += "]";
+//     // webSocket.broadcastTXT(chJson);
+
+
+    static uint32_t lastWS = 0;
+
+if (millis() - lastWS >= 100) {
+    lastWS = millis();
+
     String chJson = "[";
-    for(int i=0;i<8;i++){
-      chJson += String(tx.ch[i]);
-      if(i<8-1) chJson += ",";
+    for (int i = 0; i < 8; i++) {
+        chJson += String(tx.ch[i]);
+        if (i < 7) chJson += ",";
     }
     chJson += "]";
+
     webSocket.broadcastTXT(chJson);
+}
 // Serial debug
 
 
-    // Serial.print("📤 Channels: ");
-    // for(int i=0;i<8;i++){ Serial.print("CH"); Serial.print(i+1); Serial.print(":"); Serial.print(tx.ch[i]); Serial.print(" "); }
-    // Serial.println();
+    Serial.print("📤 Channels: ");
+    for(int i=0;i<8;i++){ Serial.print("CH"); Serial.print(i+1); Serial.print(":"); Serial.print(tx.ch[i]); Serial.print(" "); }
+    Serial.println();
 
-// delay(20);
+// delay(10);
 
      while (micros() - LoopTimer < 4000);
         LoopTimer=micros();
@@ -411,6 +447,7 @@ esp_now_send(receiverMAC, (uint8_t *)&tx, sizeof(tx));
 // // ======================
 
 // void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status)
+
 // {
 //     Serial.print("Send: ");
 //     Serial.println(status == ESP_NOW_SEND_SUCCESS ? "OK" : "FAIL");
